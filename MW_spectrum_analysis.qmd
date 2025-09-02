@@ -1,7 +1,25 @@
 ---
 title: "MW spectrum analysis"
 author: "Miha Likar"
-format: html
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    number-sections: true
+    toc-expand: true
+editor: visual
 editor: visual
 ---
+
+```{r, message = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(sjPlot)
+library(performance)
+library(ggeffects)
+library(broom.mixed)
+library(patchwork)
+library(corrplot)
+library(ggcorrplot)
+```
 
