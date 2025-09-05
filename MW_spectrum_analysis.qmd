@@ -11,6 +11,7 @@ editor: visual
 editor: visual
 ---
 
+Import required libraries:
 ```{r, message = FALSE}
 library(tidyverse)
 library(ggplot2)
@@ -21,5 +22,148 @@ library(broom.mixed)
 library(patchwork)
 library(corrplot)
 library(ggcorrplot)
+library(janitor)
+library(psych)
+library(naniar)
 ```
+
+
+# Overview
+
+This script includes exploratory data analysis, regression analysis and **** for Mind wandering ~ mental health spectrum study.
+
+# Load the datasets
+
+## First dataset
+```{r}
+df_1 <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/MW_spectrum_data/Dataset1/mw_spectrum1_dataset.csv")
+```
+
+
+## Second dataset
+```{r}
+df_2 <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/MW_spectrum_data/Dataset2/questionnaires_preprocessed.csv")
+```
+
+## Merged dataset
+```{r}
+df_merged_raw <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/MW_spectrum_data/Merged_dataset/all_spectrum_dataset.csv")
+```
+
+
+```{r}
+df_1_colnames <- colnames(df_1)
+df_2_colnames <- colnames(df_2)
+
+sort(df_1_colnames)
+sort(df_2_colnames)
+
+sort(intersect(names(df_1), names(df_2)))
+```
+
+
+```{r}
+compare_df_cols(df_1, df_2)
+```
+
+```{r}
+df_merged_raw %>%
+  filter(!is.na(mwq_1)) %>%
+  skimr::skim()
+```
+```{r}
+vis_miss(df_merged_raw) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6))
+miss_var_summary(df_merged_raw)
+```
+```{r}
+p <- vis_miss(df_merged_raw)
+
+# Save as a wide image
+ggsave("vis_miss_wide.jpg", p, width = 30, height = 8, dpi = 300)
+```
+
+# Cleaning dataset
+
+Based on the inspection of missing data, there is a few things to consider:
+
+- remove all rows where MWQ is NA
+- how do we merge BDI and BDI shortened, if we do it at all?
+- what to do with STAI?
+
+Initial dataset:
+```{r}
+describe(df_merged_raw)
+df_merged_clean <- df_merged_raw
+```
+
+**Total number of entries in the complete merged dataset is: 709**
+
+Filter out rows where MWQ has no entries. 
+```{r}
+df_merged_clean <- df_merged_clean %>%
+  filter(!is.na(mwq_1))
+```
+
+237 participants/rows/obervations were deleted as they lack MWQ responses. 
+
+**Remaining after this step: 427**
+
+Let's investigate the structure of missing data now.
+```{r}
+vis_miss(df_merged_clean)
+```
+
+There seem to be quite a few observations/participants, where majority of questionnaires were not answered. Since this would be impossible to impute, I suggest this rows/observations are deleted from the dataset. 
+
+```{r}
+df_merged_clean <- df_merged_clean %>%
+  filter(!is.na(MSSB_1) & !is.na(OCI_R_1) & !is.na(AQ_1) & !is.na(EAT_1) & !is.na(HCL32_1))
+
+df_merged_clean
+```
+
+**After filtering observations where majority of questionnaires were NA:**
+- **451 remain**
+- **21 observations were deleted**
+
+
+
+Clean/remove redundant columns:
+```{r}
+df_merged_clean <- df_merged_clean %>%
+  select(-c("...1", "X.1", "X.x", "X.y"))
+```
+
+Visualise missing data again:
+```{r}
+p2 <- vis_miss(df_merged_clean) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 4))
+
+ggsave("vis_miss_wide_2.jpg", p2, width = 30, height = 8, dpi = 300)
+```
+
+
+I noticed that for many participants `MSSB_total_score` is missing, but they have raw values. Maybe one calculation did not happen. Let's re-calculate total MSSB scores.
+```{r}
+df_merged_clean <- df_merged_clean %>%
+  mutate(MSSB_total = rowSums(across(9:46))) %>%
+  select(-MSSB_total_score)
+```
+
+
+Visualise missing data again:
+```{r}
+p3 <- vis_miss(df_merged_clean) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 4))
+
+ggsave("vis_miss_wide_3.jpg", p3, width = 30, height = 8, dpi = 300)
+```
+
+Inspect the data:
+```{r}
+glimpse(df_merged_clean)
+```
+
+
 
