@@ -8,7 +8,6 @@ format:
     number-sections: true
     toc-expand: true
 editor: visual
-editor: visual
 ---
 
 Import required libraries:
@@ -25,6 +24,12 @@ library(ggcorrplot)
 library(janitor)
 library(psych)
 library(naniar)
+library(corrr)
+library(Hmisc)
+library(fedmatch)
+library(MASS)
+library(sandwich)
+library(lmtest)
 ```
 
 
@@ -93,7 +98,6 @@ Based on the inspection of missing data, there is a few things to consider:
 
 Initial dataset:
 ```{r}
-describe(df_merged_raw)
 df_merged_clean <- df_merged_raw
 ```
 
@@ -107,7 +111,7 @@ df_merged_clean <- df_merged_clean %>%
 
 237 participants/rows/obervations were deleted as they lack MWQ responses. 
 
-**Remaining after this step: 427**
+**Remaining after this step: 472**
 
 Let's investigate the structure of missing data now.
 ```{r}
@@ -128,11 +132,9 @@ df_merged_clean
 - **21 observations were deleted**
 
 
-
 Clean/remove redundant columns:
 ```{r}
-df_merged_clean <- df_merged_clean %>%
-  select(-c("...1", "X.1", "X.x", "X.y"))
+df_merged_clean <- df_merged_clean %>%  dplyr::select(-(c("...1", "X.1", "X.x", "X.y")))
 ```
 
 Visualise missing data again:
@@ -148,7 +150,8 @@ I noticed that for many participants `MSSB_total_score` is missing, but they hav
 ```{r}
 df_merged_clean <- df_merged_clean %>%
   mutate(MSSB_total = rowSums(across(9:46))) %>%
-  select(-MSSB_total_score)
+  dplyr::select(-MSSB_total_score)
+
 ```
 
 
@@ -157,13 +160,716 @@ Visualise missing data again:
 p3 <- vis_miss(df_merged_clean) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 4))
 
+p3
+
 ggsave("vis_miss_wide_3.jpg", p3, width = 30, height = 8, dpi = 300)
 ```
 
+It seems that MAAS total score was not calculated yet. Let's do it:
+```{r}
+df_merged_clean <- df_merged_clean %>%
+  mutate(MAAS_total = rowSums(across(354:368)))
+```
+
+
+
 Inspect the data:
 ```{r}
-glimpse(df_merged_clean)
+df_merged_clean %>%
+  colnames()
+
 ```
+
+## Exclusion criteria data cleaning
+
+At this point - based on discussion with Bianka, I decide to create two datasets:
+
+- One version (`df_merged_clean`) includes all the participants BEFORE considering exclusion criteria, with removed observations described in the previous steps
+- Second version (`df_merged_clean_exc`), which is a copy of `df_merged_clean` but has additional data removal considering the exclusion criteria 
+
+Make a copy of dataset for cleaning based on exclusion criteria:
+```{r}
+df_merged_clean_exc <- df_merged_clean
+```
+
+Clean ID column in the dataset:
+```{r}
+df_merged_clean_exc <- df_merged_clean_exc %>%
+  mutate(Participant.Public.ID = clean_strings(Participant.Public.ID))
+```
+
+Create a vector with IDs that should be excluded because of diagnoses and/or medication:
+```{r}
+diag_meds_ids <- c(
+  "63z6t035",
+  "0ph4kxoj",
+  "s6ye1o1i",
+  "i7buva8v",
+  "ut85pm0q",
+  "5g9je77m",
+  "haqli8xf",
+  "8cav5z8q",
+  "i0g6t95m",
+  "21xapnnh",
+  "ektwqxeh",
+  "bemwo57f",
+  "2wl27dkz",
+  "qfgl4ric",
+  "zshuyb8c",
+  "qbftx87x",
+  "ndrjpwzk",
+  "dmsi5tdj",
+  "og81fihm",
+  "lykz1rsu",
+  "95qq6nys",
+  "adx0ufr2",
+  "gmohu013",
+  "ze5i9tkz",
+  "6gwztzbq",
+  "0ldaeete",
+  "sm7365pn",
+  "6jpt0age",
+  "ixcvnna8",
+  "ov6zilsh",
+  "yk3unkzo",
+  "dnoe2hz9",
+  "7ozph4zo",
+  "z45d64cv",
+  "hogiese2",
+  "3bqwl0jj",
+  "gbvo9nrn",
+  "gr5cbrwq",
+  "x9nkv09r",
+  "dnsmzbhb",
+  "dy5x0rhr",
+  "lq1rtrz8",
+  "7jq058u6",
+  "95lns0zf",
+  "n2szmnl5",
+  "1ki6ebat",
+  "o06rjn6t",
+  "g23mmrfq",
+  "avz00bwo",
+  "vxh4ur6x",
+  "hdpd91sm",
+  "3341mkgq",
+  "h0asw03a",
+  "54c6u933",
+  "n0jkqduu",
+  "20ag2xli",
+  "68blqj6y",
+  "oszs6wd6",
+  "x8ur0rap",
+  "35174ahw",
+  "b3q1m2le",
+  "onaesdhm",
+  "a8ivujkd",
+  "ellwx9rd",
+  "svrixmaf",
+  "et5culbq",
+  "cv8tpy4u",
+  "e260c445",
+  "xueabdvq",
+  "p04o1y03",
+  "ia304by3",
+  "9wctu8gu",
+  "3rsrjkky",
+  "me1t6vv5",
+  "eakvtfdc",
+  "9hbdbxgw",
+  "jlaro2kk",
+  "r7uo6kot",
+  "17ox37sw",
+  "gf2qoo07",
+  "tlzx847n",
+  "utvey5kc",
+  "blxzug9z",
+  "16snqjzk",
+  "zr3yrq41",
+  "2lrrsgi6",
+  "vysq3qau",
+  "zwzuyd36",
+  "b4saauq7",
+  "77bfjf3x",
+  "w0u5nqql",
+  "mpn7aupi",
+  "yq52hu7k",
+  "hxfhs230",
+  "5lm4glqo",
+  "q6ns0zck",
+  "7loy5j9t",
+  "99d8l5gl",
+  "lw419k1p",
+  "13seioww",
+  "164tmzlj",
+  "23494jc4",
+  "3qzx294k",
+  "4nv5m7yx",
+  "4rmt1ar5",
+  "8xoan1n8",
+  "9hhm7s47",
+  "9se1irn2",
+  "ab2s9eeh",
+  "agwqr49o",
+  "ct07b9dg",
+  "ep3wieca",
+  "gn1ptsuw",
+  "ha0js9y8",
+  "hfmab4tm",
+  "hga7jjmn",
+  "imfjt2n7",
+  "k63i72ms",
+  "kf5awxvi",
+  "kw4xkou0",
+  "mdi2125e",
+  "mj7qaz5g",
+  "mvcwnvgm",
+  "mwnayhk6",
+  "mxcsnw2u",
+  "qo6jqf42",
+  "qos3imhy",
+  "sf5pqpv3",
+  "sylgkmo4",
+  "tltleqqw",
+  "u1p57hh3",
+  "vq6edse3",
+  "vt8phx0n",
+  "w0vokgkx",
+  "w59nc10h",
+  "x234zqip",
+  "x6sy0ekg",
+  "xqpdq4bn",
+  "yh8ipmjq",
+  "ykbt03tb",
+  "z5gpqcuq",
+  "ze6x18f9")
+```
+
+Clean the names in the vector:
+```{r}
+diag_meds_ids <- clean_strings(diag_meds_ids)
+
+length(diag_meds_ids)
+```
+
+There are 142 participants that should be removed based on criteria diagnoses+medication.
+Check the intersect, to see whether all of there participants are still in the dataframe or perhaps they were already removed based on previous cleaning steps:
+```{r}
+intersect(diag_meds_ids, df_merged_clean_exc$Participant.Public.ID)
+length(intersect(diag_meds_ids, df_merged_clean_exc$Participant.Public.ID))
+```
+
+**There are 73 participants that should still be removed!**
+
+Removing:
+```{r}
+df_merged_clean_exc <- df_merged_clean_exc %>%
+  filter(!Participant.Public.ID %in% diag_meds_ids)
+```
+
+
+# FULL CLEAN DATA ANALYSIS
+
+Select only relevant columns from merged dataset:
+```{r}
+df_merged_analysis <- df_merged_clean %>%
+  dplyr::select(Participant.Public.ID,
+         mwq_total_score,
+         MSSB_total,
+         OCI_R_total_score,
+         AQ_total_score,
+         ASRS_total_score,
+         BDI_shorten_total_score,
+         EAT_total_score,
+         HCL32_total_score,
+         STAI_state_sum,
+         STAI_trait_sum,
+         RRS_total_score,
+         MAAS_total,
+         CAMSR_total_score,
+         gender.quantised,
+         age.year)
+```
+
+
+## STAI state and trait correlations
+
+Calculate correlation between STAI state and STAI trait
+
+```{r}
+cor(df_merged_analysis$STAI_state_sum, df_merged_analysis$STAI_trait_sum, use = "complete.obs", method = "spearman")
+```
+
+```{r}
+cor.test(df_merged_analysis$STAI_state_sum, df_merged_analysis$STAI_trait_sum, method = "spearman")
+```
+
+
+```{r}
+df_merged_analysis %>%
+  ggplot(aes(x = STAI_state_sum, y = STAI_trait_sum)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  theme_minimal() + 
+  labs(x = "STAI state", y = "STAI trait", title = "Association between STAI state and trait scores")
+```
+
+## Visualize distributions of the variables
+```{r}
+vars_to_plot <- df_merged_analysis %>%
+  dplyr::select(-Participant.Public.ID) %>%
+  colnames()
+```
+
+
+Plotting distributions:
+```{r}
+for (var in vars_to_plot) {
+  plot <- ggplot(df_merged_analysis, aes(.data[[var]])) + 
+    geom_histogram() + 
+    theme_minimal()
+  print(plot)
+}
+```
+
+### Check for normality of distributions
+
+Formal test (S-W):
+```{r}
+df_merged_analysis %>%
+  summarise(across(where(is.numeric), ~ shapiro.test(.)$p.value)) %>%
+  t() %>%
+  format(scientific = FALSE)
+```
+
+Visual inspection with QQplots:
+```{r}
+numeric_cols <- df_merged_analysis %>% 
+  dplyr::select(where(is.numeric)) %>%
+  mutate(across(everything(), ~ scale(.)))
+
+for(col_name in names(numeric_cols)){
+  qqnorm(numeric_cols[[col_name]], main = paste("QQ plot:", col_name))
+  qqline(numeric_cols[[col_name]])
+}
+```
+
+**Several variables have non-normal distribution, thus we should use Spearman correlation in our bivariate correlation analyses!**
+
+
+Let's visualise NAs as well. We need to transform the results to characters and plot with geom_bar used for factors/categories.
+
+```{r}
+for (var in vars_to_plot) {
+  tmp <- df_merged_analysis %>%
+    mutate(
+      value = ifelse(is.na(.data[[var]]), "NA", as.character(.data[[var]]))
+    )
+  
+  # Get levels in numeric order, then add "NA"
+  lvls <- c(as.character(sort(unique(na.omit(df_merged_analysis[[var]])))), "NA")
+  
+  p <- ggplot(tmp, aes(factor(value, levels = lvls))) +
+    geom_bar() +
+    theme_minimal() +
+    labs(title = var, x = var)
+  
+  print(p)
+}
+```
+
+## Correlations (bivariate; correlation matrix)
+
+Create a correlation test to use for matrix:
+```{r}
+corr_matrix <- df_merged_analysis %>%
+  dplyr::select(-c(age.year, gender.quantised, Participant.Public.ID, STAI_trait_sum, RRS_total_score, MAAS_total, CAMSR_total_score)) %>%
+  na.omit() %>%
+  corr.test(method = "spearman", adjust = "bonferroni")
+```
+
+Uncorrected p-values matrix:
+```{r}
+var_names <- c( "Mind-wandering (MWQ)", "Shizotypy (MSS-B)", "OCD (OCI-R)", "Autism spectrum (AQ)", "ADHD (ASRS)", "Depression (BDI shortened)",  "Eating disorder (EAT)", "Hypomania (HCL-32)", "Anxiety (STAI state)")
+
+colnames(corr_matrix$r) <- var_names
+rownames(corr_matrix$r) <- var_names
+
+corrplot(
+  corr_matrix$r,
+  p.mat = corr_matrix$raw,     # raw p-values
+  sig.level = 0.05,            # uncorrected alpha
+  type = "upper",
+  insig = "blank",
+  method = "ellipse",
+  addCoef.col = "black",
+  number.cex = 0.7,
+  title = "Uncorrected correlations",
+  tl.cex = 0.75,
+  tl.col = "black"
+)
+```
+
+
+```{r}
+# ----------------------------
+# 2️⃣ Bonferroni-adjusted correlations
+# ----------------------------
+corrplot(
+  corr_matrix$r,
+  p.mat = corr_matrix$p,
+  type = "upper",# adjusted p-values
+  sig.level = 0.05,            # compare to 0.05 now
+  method = "ellipse",
+  addCoef.col = "black",
+  number.cex = 0.7,
+  title = "Bonferroni-adjusted correlations",
+  tl.cex = 0.75,
+  tl.col = "black"
+)
+```
+
+
+Trying ggcorrplot:
+```{r}
+r_mat <- corr_matrix$r
+p_mat <- corr_matrix$p
+
+#r_mat_ordered <- r_mat[var_order, var_order]
+#p_mat_ordered <- p_mat[var_order, var_order]
+
+ggcorrplot(corr_matrix$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix$p,        # pass p-values
+           sig.level = 0.05, 
+           insig = "blank", # threshold for significance,
+           lab_col = "black") +
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Correlation matrix of variable of interest", subtitle = "Below the diagonal, associations with insignificant unadjusted p-values were removed. \nAbove the diagonal, associations with insignificant adjusted p-values were removed.") + 
+  scale_x_discrete(labels = var_names) +
+  scale_y_discrete(labels = var_names) + 
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+```
+
+
+## Regression analysis
+
+Clean the dataset completely - **at this point 1 observation is removed due to missing BDI values** - not imputed in this version of the analysis!
+```{r}
+df_merged_analysis_clean <- df_merged_analysis %>%
+  dplyr::select(-c(age.year, gender.quantised, Participant.Public.ID, STAI_trait_sum, RRS_total_score, MAAS_total, CAMSR_total_score)) %>%
+  na.omit()
+
+glimpse(df_merged_analysis_clean)
+```
+
+Let's scale (standardise) all the numeric variables.
+```{r}
+df_merged_analysis_clean_std <- df_merged_analysis_clean %>%
+  mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
+```
+
+Check the data
+```{r}
+glimpse(df_merged_analysis_clean_std)
+```
+
+
+Multiple regression:
+```{r}
+reg_model <- lm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_score 
++ ASRS_total_score + BDI_shorten_total_score + EAT_total_score + HCL32_total_score + STAI_state_sum, data = df_merged_analysis_clean_std)
+
+summary(reg_model)
+```
+
+Create a nice tab for the results WITHOUT adjustment (for comparison):
+```{r}
+tab_model(reg_model)
+```
+
+
+Create a nice tab for the results and use **bonferroni adjustment**!
+```{r}
+tab_model(reg_model, p.adjust = "bonferroni")
+```
+
+Plot model estimates:
+```{r}
+plot_model(reg_model, type = "est", p.adjust = "bonferroni", show.value = TRUE, value.offset = 0.35) + 
+  theme_minimal() + 
+  labs(title = "MWQ predicted be questionnaires") +
+  scale_x_discrete(labels = c("STAI", "HCL32", "EAT", "BDI short", "ASRS", "AQ", "OCI-R", "MSSB"))
+```
+
+### Model diagnostics (influential points, assumptions check - normality of residuals, homogeneity, multicolinearity)
+
+#### Influential points
+
+Cook's distance - using rule of thumb: threshold = 4/n observations.
+```{r}
+plot(reg_model, 4)
+abline(h = 4/nrow(df_merged_analysis_clean_std), col = "red") 
+```
+Several points are over the arbitrary threshold for Cook's distance. Especially 3 observations have severe values (observations: 13, 116, 130). Let's isolate these points and check their values in various questionnaires. 
+
+```{r}
+augment(reg_model) %>% 
+  mutate(row_n = seq((1:nrow(df_merged_analysis_clean_std)))) %>% 
+  relocate(row_n, 1) %>%
+  filter(row_n %in% c(13, 116, 130))
+```
+Let's plot all the prediction plots and try to identify these points. They seem to have severe deviation in:
+
+- **Row 13**: -3.22 SD below mean of MWQ, 6.73 SD over mean STAI state
+- **Row 116**: -3.22 SD below mean of MWQ
+- **Row 130** 3.73 SD over mean ASRS score
+
+Plotting:
+```{r}
+plot_model(reg_model, type = "pred", show.data = TRUE)
+```
+
+**After visual inspection, I think that deviation in MWQ is not problematic. However, I suggest removing influential points 13 and possibly 130.** But let's first check other indices of the model.
+
+```{r}
+plot(reg_model, which = c(5,6))
+```
+
+Yes, observation 13 is definitely a severe outlier and should be removed from the data as it's influence on the model is too severe. Consider 116 and 130 as well.
+
+#### Checking model assumptions
+
+Check model for violation of assumptions:
+```{r}
+check_model(reg_model)
+```
+**Check normality of residuals**
+
+Test:
+```{r}
+check_normality(reg_model)
+```
+Plot:
+```{r}
+plot(reg_model, 2)
+```
+**Check for homoscedasticity**
+
+Test
+```{r}
+check_heteroscedasticity(reg_model)
+```
+
+```{r}
+check_heteroscedasticity(reg_model) |> plot()
+```
+
+```{r}
+augment(reg_model) %>% 
+  mutate(row_n = seq((1:nrow(df_merged_analysis_clean_std)))) %>% 
+  relocate(row_n, 1) %>%
+  arrange(desc(.fitted))
+```
+
+We can see that the "problematic" point detected in visual inspection on the homogeneity of variance plot is observation 130. Again, I think that all these inspections suggest we remove 13 and 130 from the data. 
+
+**Check for multicolinearity**
+Test
+```{r}
+check_collinearity(reg_model)
+```
+
+Visualise:
+```{r}
+check_collinearity(reg_model) |> plot()
+```
+
+**Summary**: based on the visual inspection and formal tests, I suggest we create another model from which two influential points are removed (observations 13 and 130), check all the assumptions and then compare model performance. 
+
+
+## Additional regression analysis with removed influential points
+
+Remove influential points from the dataset - rows 13 and 130.
+```{r}
+influential_points <- c(13, 130)
+df_merged_analysis_clean_std_rem_infl <- df_merged_analysis_clean_std %>%
+  slice(-influential_points)
+```
+
+**Repeat all the steps:**
+
+Multiple regression:
+```{r}
+reg_model_removed_influentials <- lm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_score 
++ ASRS_total_score + BDI_shorten_total_score + EAT_total_score + HCL32_total_score + STAI_state_sum, data = df_merged_analysis_clean_std_rem_infl)
+
+summary(reg_model_removed_influentials)
+```
+
+Create a nice tab for the results WITHOUT adjustment (for comparison):
+```{r}
+tab_model(reg_model_removed_influentials, show.stat = TRUE)
+```
+
+
+Create a nice tab for the results and use **bonferroni adjustment**!
+```{r}
+tab_model(reg_model_removed_influentials, p.adjust = "bonferroni")
+```
+
+Plot model estimates:
+```{r}
+plot_model(reg_model_removed_influentials, type = "est", p.adjust = "bonferroni", show.value = TRUE, value.offset = 0.35) + 
+  theme_minimal() + 
+  labs(title = "MWQ predicted be questionnaires") +
+  scale_x_discrete(labels = c("STAI", "HCL32", "EAT", "BDI short", "ASRS", "AQ", "OCI-R", "MSSB"))
+```
+
+### Model diagnostics (influential points, assumptions check - normality of residuals, homogeneity, multicolinearity)
+
+#### Influential points
+
+Cook's distance - using rule of thumb: threshold = 4/n observations. *As removing the points and using such visualisation is basically a recursive process, we can see that after removing 2 influential points in the previous step, there is nor much larger deviation in Cook's distances.*
+```{r}
+plot(reg_model_removed_influentials, 4)
+abline(h = 4/nrow(df_merged_analysis_clean_std_rem_infl), col = "red") 
+```
+
+Plotting:
+```{r}
+plot_model(reg_model_removed_influentials, type = "pred", show.data = TRUE)
+```
+Much better, no evident extreme outliers!
+
+
+Let's check other indices of the model.
+```{r}
+plot(reg_model_removed_influentials, which = c(5,6))
+```
+
+Much better.
+
+#### Checking model assumptions
+
+```{r}
+check_model(reg_model_removed_influentials)
+```
+
+
+**Check normality of residuals**
+Test:
+```{r}
+check_normality(reg_model_removed_influentials) |> plot()
+```
+Plot:
+```{r}
+plot(reg_model_removed_influentials, 2)
+```
+While formal test suggest non-normality, visual inspection is not that horrible. Maybe we should discuss this in more details!
+
+**Check for homoscedasticity**
+Test
+```{r}
+check_heteroscedasticity(reg_model_removed_influentials)
+```
+
+```{r}
+check_heteroscedasticity(reg_model_removed_influentials) |> plot()
+```
+Now there seem to be some points with negative fitted values that affect homoscedasticity, however not severly. Still, let's see which points are they (perhaps 116 from the previous dataset, which would now be 115). 
+
+```{r}
+augment(reg_model_removed_influentials) %>% 
+  mutate(row_n = seq((1:nrow(df_merged_analysis_clean_std_rem_infl)))) %>% 
+  relocate(row_n, 1) %>%
+  arrange(.fitted)
+```
+No, it is not previously discussed observation 116. I think that considering visual inspection and formal tests, there is no need to remove any additional data points. 
+
+
+**Check for multicolinearity**
+Test
+```{r}
+check_collinearity(reg_model_removed_influentials)
+```
+
+Visualise:
+```{r}
+check_collinearity(reg_model_removed_influentials) |> plot()
+```
+Again, no issues with multicolinearity!
+
+
+## Model comparison
+
+Let us now compare the initial model (`reg_model`) and the second model, where 2 influential datapoints were removed (`reg_model_removed_influentials`).
+
+```{r}
+compare_performance(reg_model, reg_model_removed_influentials)
+```
+
+**We can see that there is no significant difference in model performance, so we can still think about whether to stick to the model with all the datapoints or stick to the model with removed datapoints.** While I did identify them as influential according to arbitrary thresholds, both models passed assumptions of multicolinearity and homoscedasticity, however both had slight issues in passing assumption of normality. 
+
+**At this point it might be sensible to try a more robust modelling approach with `rlm()` from `MASS` package. 
+
+**Reason:** A few extreme or highly influential points in the data
+can disproportionately affect the estimates in lm models.
+
+`rlm()` from the `MASS` package implements robust regression using **M-estimation**.
+This downweights the influence of outliers automatically, producing 
+more stable and reliable coefficient estimates without removing data points.
+
+Difference from `lm()`:
+- `lm()` minimizes the sum of squared residuals; large residuals have a big effect.
+- `rlm()` minimizes a weighted sum, reducing the impact of extreme values.
+- Coefficients may differ slightly from `lm()` if outliers exist.
+- Standard errors and p-values are handled differently; **robust SEs can be computed separately.**
+
+**In short**: `rlm()` helps ensure that a few unusual observations don't distort the model.
+
+## Additional regression - Robust linear model using rlm()
+
+In order to see whether it makes more sense to use robust lm or continue with the model where influential points were removed, let's fit the robust lm on original clean dataset with all 450 observations. 
+
+```{r}
+rlm_model <- rlm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_score 
++ ASRS_total_score + BDI_shorten_total_score + EAT_total_score + HCL32_total_score + STAI_state_sum, data = df_merged_analysis_clean_std)
+```
+
+See the model summary:
+```{r}
+summary(rlm_model)
+```
+
+We have to calculate robust SEs and p-values separately.
+```{r}
+coeftest(rlm_model, vcov = vcovHC(rlm_model, type = "HC3"))
+```
+
+```{r}
+robust_summary <- coeftest(rlm_model, vcov = vcovHC(rlm_model, type = "HC3"))
+
+# optionally add corrected p-values
+robust_summary_df <- data.frame(
+  Estimate = round(robust_summary[, "Estimate"], 4),
+  Robust_SE = round(robust_summary[, "Std. Error"], 4),
+  t_value = round(robust_summary[, "z value"], 4),
+  p_value = round(robust_summary[, "Pr(>|z|)"], 4),
+  p_bonf = round(p.adjust(robust_summary[, "Pr(>|z|)"], method = "bonferroni"), 4)
+)
+
+robust_summary_df
+```
+
 
 
 
