@@ -432,6 +432,11 @@ for (var in vars_to_plot) {
 }
 ```
 
+```{r}
+summary(df_merged_analysis)
+```
+
+
 ### Check for normality of distributions
 
 Formal test (S-W):
@@ -538,7 +543,7 @@ p_mat <- corr_matrix$p
 #r_mat_ordered <- r_mat[var_order, var_order]
 #p_mat_ordered <- p_mat[var_order, var_order]
 
-ggcorrplot(corr_matrix$r, 
+corr_matrix_ggplot <- ggcorrplot(corr_matrix$r, 
            type = "full",
            lab = TRUE, 
            lab_size = 4,
@@ -557,6 +562,8 @@ ggcorrplot(corr_matrix$r,
     plot.title = element_text(hjust = 0), 
     plot.subtitle = element_text(hjust = 0)
   )
+
+corr_matrix_ggplot
 ```
 
 
@@ -637,6 +644,8 @@ Plotting:
 ```{r}
 plot_model(reg_model, type = "pred", show.data = TRUE)
 ```
+
+**Possibly non-linear relationship in MSS-B and OCI-R?**
 
 **After visual inspection, I think that deviation in MWQ is not problematic. However, I suggest removing influential points 13 and possibly 130.** But let's first check other indices of the model.
 
@@ -723,7 +732,7 @@ tab_model(reg_model_removed_influentials, show.stat = TRUE)
 
 Create a nice tab for the results and use **bonferroni adjustment**!
 ```{r}
-tab_model(reg_model_removed_influentials, p.adjust = "bonferroni")
+tab_model(reg_model_removed_influentials, p.adjust = "bonferroni", digits = 3, show.se = TRUE, title = "Model for full dataset with removed influential points + Bonferroni adjustment")
 ```
 
 Plot model estimates:
@@ -748,7 +757,8 @@ Plotting:
 ```{r}
 plot_model(reg_model_removed_influentials, type = "pred", show.data = TRUE)
 ```
-Much better, no evident extreme outliers!
+
+Much better, no evident extreme outliers! **However, possibly non-linear relationship in MSS-B and OCI-R?**
 
 
 Let's check other indices of the model.
@@ -871,5 +881,404 @@ robust_summary_df
 ```
 
 
+# REDUCED DATA ANALYSIS - SAMPLE WITHOUT DIAGNOSED/MEDICATED PARTICIPANTS
 
+Select only relevant columns from merged dataset:
+```{r}
+df_merged_exc_analysis <- df_merged_clean_exc %>%
+  dplyr::select(Participant.Public.ID,
+         mwq_total_score,
+         MSSB_total,
+         OCI_R_total_score,
+         AQ_total_score,
+         ASRS_total_score,
+         BDI_shorten_total_score,
+         EAT_total_score,
+         HCL32_total_score,
+         STAI_state_sum,
+         STAI_trait_sum,
+         RRS_total_score,
+         MAAS_total,
+         CAMSR_total_score,
+         gender.quantised,
+         age.year)
+```
+
+
+## STAI state and trait correlations
+
+Calculate correlation between STAI state and STAI trait
+
+```{r}
+cor(df_merged_exc_analysis$STAI_state_sum, df_merged_exc_analysis$STAI_trait_sum, use = "complete.obs", method = "spearman")
+```
+
+```{r}
+cor.test(df_merged_exc_analysis$STAI_state_sum, df_merged_exc_analysis$STAI_trait_sum, method = "spearman")
+```
+
+
+```{r}
+df_merged_exc_analysis %>%
+  ggplot(aes(x = STAI_state_sum, y = STAI_trait_sum)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  theme_minimal() + 
+  labs(x = "STAI state", y = "STAI trait", title = "Association between STAI state and trait scores (reduced sample)")
+```
+
+## Visualize distributions of the variables
+
+Plotting distributions:
+```{r}
+for (var in vars_to_plot) {
+  plot <- ggplot(df_merged_exc_analysis, aes(.data[[var]])) + 
+    geom_histogram() + 
+    theme_minimal()
+  print(plot)
+}
+```
+
+```{r}
+summarise_data <- function(df) {
+  df %>%
+    summarise(across(
+      where(is.numeric),
+      list(
+        mean   = ~ mean(.x, na.rm = TRUE),
+        median = ~ median(.x, na.rm = TRUE),
+        sd     = ~ sd(.x, na.rm = TRUE)
+      ),
+      .names = "{.col}_{.fn}"
+    ))
+}
+```
+
+Let's compare summaries of the two datasets (full and reduced):
+```{r}
+bind_rows(
+  full_df = summarise_data(df_merged_analysis),
+  reduced_df = summarise_data(df_merged_exc_analysis),
+  .id = "dataset"
+) %>%
+  tidyr::pivot_longer(-dataset) %>% 
+  tidyr::pivot_wider(names_from = dataset, values_from = value)
+```
+
+
+### Check for normality of distributions
+
+Formal test (S-W):
+```{r}
+df_merged_exc_analysis %>%
+  summarise(across(where(is.numeric), ~ shapiro.test(.)$p.value)) %>%
+  t() %>%
+  format(scientific = FALSE)
+```
+
+Visual inspection with QQplots:
+```{r}
+numeric_cols_exc <- df_merged_exc_analysis %>% 
+  dplyr::select(where(is.numeric)) %>%
+  mutate(across(everything(), ~ scale(.)))
+
+for(col_name in names(numeric_cols_exc)){
+  qqnorm(numeric_cols_exc[[col_name]], main = paste("QQ plot (reduced dataset):", col_name))
+  qqline(numeric_cols_exc[[col_name]])
+}
+```
+
+**Several variables have non-normal distribution, thus we should use Spearman correlation in our bivariate correlation analyses!**
+
+
+Let's visualise NAs as well. We need to transform the results to characters and plot with geom_bar used for factors/categories.
+
+```{r}
+for (var in vars_to_plot) {
+  tmp <- df_merged_exc_analysis %>%
+    mutate(
+      value = ifelse(is.na(.data[[var]]), "NA", as.character(.data[[var]]))
+    )
+  
+  # Get levels in numeric order, then add "NA"
+  lvls <- c(as.character(sort(unique(na.omit(df_merged_exc_analysis[[var]])))), "NA")
+  
+  p <- ggplot(tmp, aes(factor(value, levels = lvls))) +
+    geom_bar() +
+    theme_minimal() +
+    labs(title = var, x = var)
+  
+  print(p)
+}
+```
+
+## Correlations (bivariate; correlation matrix)
+
+Create a correlation test to use for matrix:
+```{r}
+corr_matrix_exc <- df_merged_exc_analysis %>%
+  dplyr::select(-c(age.year, gender.quantised, Participant.Public.ID, STAI_trait_sum, RRS_total_score, MAAS_total, CAMSR_total_score)) %>%
+  na.omit() %>%
+  corr.test(method = "spearman", adjust = "bonferroni")
+```
+
+Uncorrected p-values matrix:
+```{r}
+var_names <- c( "Mind-wandering (MWQ)", "Shizotypy (MSS-B)", "OCD (OCI-R)", "Autism spectrum (AQ)", "ADHD (ASRS)", "Depression (BDI shortened)",  "Eating disorder (EAT)", "Hypomania (HCL-32)", "Anxiety (STAI state)")
+
+colnames(corr_matrix_exc$r) <- var_names
+rownames(corr_matrix_exc$r) <- var_names
+
+corrplot(
+  corr_matrix_exc$r,
+  p.mat = corr_matrix_exc$raw,     # raw p-values
+  sig.level = 0.05,            # uncorrected alpha
+  type = "upper",
+  insig = "blank",
+  method = "ellipse",
+  addCoef.col = "black",
+  number.cex = 0.7,
+  title = "Uncorrected correlations",
+  tl.cex = 0.75,
+  tl.col = "black"
+)
+```
+
+
+```{r}
+# ----------------------------
+# 2️⃣ Bonferroni-adjusted correlations
+# ----------------------------
+corrplot(
+  corr_matrix_exc$r,
+  p.mat = corr_matrix_exc$p,
+  type = "upper",# adjusted p-values
+  sig.level = 0.05,            # compare to 0.05 now
+  method = "ellipse",
+  addCoef.col = "black",
+  number.cex = 0.7,
+  title = "Bonferroni-adjusted correlations",
+  tl.cex = 0.75,
+  tl.col = "black"
+)
+```
+
+
+Trying ggcorrplot:
+```{r}
+r_mat_exc <- corr_matrix_exc$r
+p_mat_exc <- corr_matrix_exc$p
+
+#r_mat_ordered <- r_mat[var_order, var_order]
+#p_mat_ordered <- p_mat[var_order, var_order]
+
+corr_matrix_exc_ggplot <- ggcorrplot(corr_matrix_exc$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix$p,        # pass p-values
+           sig.level = 0.05, 
+           insig = "blank", # threshold for significance,
+           lab_col = "black") +
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Correlation matrix of variable of interest (reduced dataset)", subtitle = "Below the diagonal, associations with insignificant unadjusted p-values were removed. \nAbove the diagonal, associations with insignificant adjusted p-values were removed.") + 
+  scale_x_discrete(labels = var_names) +
+  scale_y_discrete(labels = var_names) + 
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+
+corr_matrix_exc_ggplot
+```
+
+Let's compare ggcorrplots of full and reduced datasets:
+
+```{r}
+corr_matrix_ggplot
+corr_matrix_exc_ggplot
+```
+**In reduced dataset there are slightly stronger correlations between MW and ASRS, OCI-R and MSS-B; however slightly weaker correlation with HCL-32. Despite these slight differences, when p-adjustment is applied, the same bivariate correlations remain significant.**
+
+## Regression analysis
+
+Clean the dataset completely - **at this point 1 observation is removed due to missing BDI values** - not imputed in this version of the analysis!
+```{r}
+df_merged_exc_analysis_clean <- df_merged_exc_analysis %>%
+  dplyr::select(-c(age.year, gender.quantised, Participant.Public.ID, STAI_trait_sum, RRS_total_score, MAAS_total, CAMSR_total_score)) %>%
+  na.omit()
+
+glimpse(df_merged_exc_analysis_clean)
+```
+
+Let's scale (standardise) all the numeric variables.
+```{r}
+df_merged_exc_analysis_clean_std <- df_merged_exc_analysis_clean %>%
+  mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
+```
+
+Check the data
+```{r}
+glimpse(df_merged_exc_analysis_clean_std)
+```
+
+
+Multiple regression:
+```{r}
+reg_model_exc <- lm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_score 
++ ASRS_total_score + BDI_shorten_total_score + EAT_total_score + HCL32_total_score + STAI_state_sum, data = df_merged_exc_analysis_clean_std)
+
+summary(reg_model_exc)
+```
+
+Create a nice tab for the results WITHOUT adjustment (for comparison):
+```{r}
+tab_model(reg_model_exc)
+```
+
+
+Create a nice tab for the results and use **bonferroni adjustment**!
+```{r}
+tab_model(reg_model_exc, p.adjust = "bonferroni")
+```
+
+
+And let's compare the basic model from full dataset (`reg_model`) and current model on reduced dataset (`reg_model_exc`).
+```{r}
+tab_model(reg_model,
+          reg_model_exc,
+          p.adjust = "bonferroni")
+```
+
+
+Plot model estimates:
+```{r}
+plot_model(reg_model_exc, type = "est", p.adjust = "bonferroni", show.value = TRUE, value.offset = 0.35) + 
+  theme_minimal() + 
+  labs(title = "MWQ predicted be questionnaires (reduced dataset)") +
+  scale_x_discrete(labels = c("STAI", "HCL32", "EAT", "BDI short", "ASRS", "AQ", "OCI-R", "MSSB"))
+```
+
+### Model diagnostics (influential points, assumptions check - normality of residuals, homogeneity, multicolinearity)
+
+#### Influential points
+
+Cook's distance - using rule of thumb: threshold = 4/n observations.
+```{r}
+plot(reg_model_exc, 4)
+abline(h = 4/nrow(df_merged_exc_analysis_clean_std), col = "red") 
+```
+Several points are over the arbitrary threshold for Cook's distance. However, comparing the relative differences, no particular observation really stands out, so probably removing influential points is not necessary in the reduced dataset.
+
+```{r}
+#augment(reg_model_exc) %>% 
+#  mutate(row_n = seq((1:nrow(df_merged_exc_analysis_clean_std)))) %>% 
+#  relocate(row_n, 1) %>%
+#  filter(row_n %in% c(13, 116, 130))
+```
+
+
+Plotting:
+```{r}
+plot_model(reg_model_exc, type = "pred", show.data = TRUE)
+```
+
+Looking at the visualisation of predictions and raw data, no particular observations stands out as influential outlier. **However, importantly, visualisation suggest that the relationship in case of MSS-B, OCI-R and possibly AQ suggest a non-linear relationship.** Maybe we should consider this...
+
+```{r}
+plot(reg_model_exc, which = c(5,6))
+```
+
+Some observations stand out - 71, 125, 318, which were also highlighted in Cook's distance visualisation. But let's check additional test and visualisations!
+
+#### Checking model assumptions
+
+Check model for violation of assumptions:
+```{r}
+check_model(reg_model_exc)
+```
+
+**Check normality of residuals**
+Test:
+```{r}
+check_normality(reg_model_exc)
+```
+Plot:
+```{r}
+plot(reg_model_exc, 2)
+```
+
+**Check for homoscedasticity**
+Test
+```{r}
+check_heteroscedasticity(reg_model_exc)
+```
+
+```{r}
+check_heteroscedasticity(reg_model_exc) |> plot()
+```
+
+```{r}
+augment(reg_model_exc) %>% 
+  mutate(row_n = seq((1:nrow(df_merged_exc_analysis_clean_std)))) %>% 
+  relocate(row_n, 1) %>%
+  arrange(desc(.fitted))
+```
+
+We can see that the despite passing the formal test, visualisation suggest some points affecting homoscedasticity. Influential point at the positive extreme are observations 318 and 163 and at the negative extreme 329 and 241. However, these points are not concretely extreme and are within expected bounds, so based on visualisations and tests I again suggest no removal of observations. 
+
+```{r}
+check_outliers(reg_model_exc) |> plot()
+```
+
+**Check for multicolinearity**
+Test
+```{r}
+check_collinearity(reg_model_exc)
+```
+
+Visualise:
+```{r}
+check_collinearity(reg_model_exc) |> plot()
+```
+
+**Summary**: based on the visual inspection and formal tests, I suggest no removal of observations and keep this regression model as the main model for reduced dataset. 
+
+
+# Tab for all models created so far
+
+In this tab three models are plotted:
+
+- initial model on full dataset (`reg_model`)
+- updated model on full dateset with removed 2 influential points (`reg_model_removed_influentials`)
+- model for reduced dataset - no diagnosed/medicated participants (`reg_model_exc`)
+
+
+**Note:** `rlm()` model on full dataset cannot be visualised in the same tab because `tab_model()` does not support `rlm()` models.
+
+In order to compare them, summary of `rlm()` model on full dataset (no influential points removed) is pasted below.
+
+Tab for `lm()` models:
+```{r}
+tab_model(reg_model,
+          reg_model_removed_influentials,
+          reg_model_exc, 
+          show.se = TRUE,
+          show.ci = FALSE,
+          show.stat = TRUE,
+          show.df = TRUE,
+          digits = 3,
+          p.adjust = "bonferroni",
+          dv.labels = c("MWQ predictions on full data", "MWQ predictions on full data with 2 influentail points removed", "MWQ predictions on reduced data"),
+          title = "3 models predicting MWQ score. p-values for all models were adjusted (Bonferroni).")
+```
+
+
+Summary of `rlm()`:
+```{r}
+robust_summary_df
+```
 
