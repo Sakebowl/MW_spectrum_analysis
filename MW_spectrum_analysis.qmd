@@ -11,6 +11,7 @@ editor: visual
 ---
 
 Import required libraries:
+
 ```{r, message = FALSE}
 library(tidyverse)
 library(ggplot2)
@@ -30,31 +31,32 @@ library(fedmatch)
 library(MASS)
 library(sandwich)
 library(lmtest)
+library(kableExtra)
 ```
-
 
 # Overview
 
-This script includes exploratory data analysis, regression analysis and **** for Mind wandering ~ mental health spectrum study.
+This script includes exploratory data analysis, regression analysis and \*\*\*\* for Mind wandering \~ mental health spectrum study.
 
 # Load the datasets
 
 ## First dataset
+
 ```{r}
 df_1 <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/MW_spectrum_data/Dataset1/mw_spectrum1_dataset.csv")
 ```
 
-
 ## Second dataset
+
 ```{r}
 df_2 <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/MW_spectrum_data/Dataset2/questionnaires_preprocessed.csv")
 ```
 
 ## Merged dataset
+
 ```{r}
 df_merged_raw <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/MW_spectrum_data/Merged_dataset/all_spectrum_dataset.csv")
 ```
-
 
 ```{r}
 df_1_colnames <- colnames(df_1)
@@ -66,7 +68,6 @@ sort(df_2_colnames)
 sort(intersect(names(df_1), names(df_2)))
 ```
 
-
 ```{r}
 compare_df_cols(df_1, df_2)
 ```
@@ -76,11 +77,13 @@ df_merged_raw %>%
   filter(!is.na(mwq_1)) %>%
   skimr::skim()
 ```
+
 ```{r}
 vis_miss(df_merged_raw) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6))
 miss_var_summary(df_merged_raw)
 ```
+
 ```{r}
 p <- vis_miss(df_merged_raw)
 
@@ -92,33 +95,36 @@ ggsave("vis_miss_wide.jpg", p, width = 30, height = 8, dpi = 300)
 
 Based on the inspection of missing data, there is a few things to consider:
 
-- remove all rows where MWQ is NA
-- how do we merge BDI and BDI shortened, if we do it at all?
-- what to do with STAI?
+-   remove all rows where MWQ is NA
+-   how do we merge BDI and BDI shortened, if we do it at all?
+-   what to do with STAI?
 
 Initial dataset:
+
 ```{r}
 df_merged_clean <- df_merged_raw
 ```
 
 **Total number of entries in the complete merged dataset is: 709**
 
-Filter out rows where MWQ has no entries. 
+Filter out rows where MWQ has no entries.
+
 ```{r}
 df_merged_clean <- df_merged_clean %>%
   filter(!is.na(mwq_1))
 ```
 
-237 participants/rows/obervations were deleted as they lack MWQ responses. 
+237 participants/rows/obervations were deleted as they lack MWQ responses.
 
 **Remaining after this step: 472**
 
 Let's investigate the structure of missing data now.
+
 ```{r}
 vis_miss(df_merged_clean)
 ```
 
-There seem to be quite a few observations/participants, where majority of questionnaires were not answered. Since this would be impossible to impute, I suggest this rows/observations are deleted from the dataset. 
+There seem to be quite a few observations/participants, where majority of questionnaires were not answered. Since this would be impossible to impute, I suggest this rows/observations are deleted from the dataset.
 
 ```{r}
 df_merged_clean <- df_merged_clean %>%
@@ -127,17 +133,16 @@ df_merged_clean <- df_merged_clean %>%
 df_merged_clean
 ```
 
-**After filtering observations where majority of questionnaires were NA:**
-- **451 remain**
-- **21 observations were deleted**
-
+**After filtering observations where majority of questionnaires were NA:** - **451 remain** - **21 observations were deleted**
 
 Clean/remove redundant columns:
+
 ```{r}
 df_merged_clean <- df_merged_clean %>%  dplyr::select(-(c("...1", "X.1", "X.x", "X.y")))
 ```
 
 Visualise missing data again:
+
 ```{r}
 p2 <- vis_miss(df_merged_clean) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 4))
@@ -145,8 +150,8 @@ p2 <- vis_miss(df_merged_clean) +
 ggsave("vis_miss_wide_2.jpg", p2, width = 30, height = 8, dpi = 300)
 ```
 
-
 I noticed that for many participants `MSSB_total_score` is missing, but they have raw values. Maybe one calculation did not happen. Let's re-calculate total MSSB scores.
+
 ```{r}
 df_merged_clean <- df_merged_clean %>%
   mutate(MSSB_total = rowSums(across(9:46))) %>%
@@ -154,8 +159,8 @@ df_merged_clean <- df_merged_clean %>%
 
 ```
 
-
 Visualise missing data again:
+
 ```{r}
 p3 <- vis_miss(df_merged_clean) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 4))
@@ -166,14 +171,14 @@ ggsave("vis_miss_wide_3.jpg", p3, width = 30, height = 8, dpi = 300)
 ```
 
 It seems that MAAS total score was not calculated yet. Let's do it:
+
 ```{r}
 df_merged_clean <- df_merged_clean %>%
   mutate(MAAS_total = rowSums(across(354:368)))
 ```
 
-
-
 Inspect the data:
+
 ```{r}
 df_merged_clean %>%
   colnames()
@@ -184,21 +189,24 @@ df_merged_clean %>%
 
 At this point - based on discussion with Bianka, I decide to create two datasets:
 
-- One version (`df_merged_clean`) includes all the participants BEFORE considering exclusion criteria, with removed observations described in the previous steps
-- Second version (`df_merged_clean_exc`), which is a copy of `df_merged_clean` but has additional data removal considering the exclusion criteria 
+-   One version (`df_merged_clean`) includes all the participants BEFORE considering exclusion criteria, with removed observations described in the previous steps
+-   Second version (`df_merged_clean_exc`), which is a copy of `df_merged_clean` but has additional data removal considering the exclusion criteria
 
 Make a copy of dataset for cleaning based on exclusion criteria:
+
 ```{r}
 df_merged_clean_exc <- df_merged_clean
 ```
 
 Clean ID column in the dataset:
+
 ```{r}
 df_merged_clean_exc <- df_merged_clean_exc %>%
   mutate(Participant.Public.ID = clean_strings(Participant.Public.ID))
 ```
 
 Create a vector with IDs that should be excluded because of diagnoses and/or medication:
+
 ```{r}
 diag_meds_ids <- c(
   "63z6t035",
@@ -346,14 +354,15 @@ diag_meds_ids <- c(
 ```
 
 Clean the names in the vector:
+
 ```{r}
 diag_meds_ids <- clean_strings(diag_meds_ids)
 
 length(diag_meds_ids)
 ```
 
-There are 142 participants that should be removed based on criteria diagnoses+medication.
-Check the intersect, to see whether all of there participants are still in the dataframe or perhaps they were already removed based on previous cleaning steps:
+There are 142 participants that should be removed based on criteria diagnoses+medication. Check the intersect, to see whether all of there participants are still in the dataframe or perhaps they were already removed based on previous cleaning steps:
+
 ```{r}
 intersect(diag_meds_ids, df_merged_clean_exc$Participant.Public.ID)
 length(intersect(diag_meds_ids, df_merged_clean_exc$Participant.Public.ID))
@@ -362,15 +371,16 @@ length(intersect(diag_meds_ids, df_merged_clean_exc$Participant.Public.ID))
 **There are 73 participants that should still be removed!**
 
 Removing:
+
 ```{r}
 df_merged_clean_exc <- df_merged_clean_exc %>%
   filter(!Participant.Public.ID %in% diag_meds_ids)
 ```
 
-
 # FULL CLEAN DATA ANALYSIS
 
 Select only relevant columns from merged dataset:
+
 ```{r}
 df_merged_analysis <- df_merged_clean %>%
   dplyr::select(Participant.Public.ID,
@@ -391,7 +401,6 @@ df_merged_analysis <- df_merged_clean %>%
          age.year)
 ```
 
-
 ## STAI state and trait correlations
 
 Calculate correlation between STAI state and STAI trait
@@ -404,7 +413,6 @@ cor(df_merged_analysis$STAI_state_sum, df_merged_analysis$STAI_trait_sum, use = 
 cor.test(df_merged_analysis$STAI_state_sum, df_merged_analysis$STAI_trait_sum, method = "spearman")
 ```
 
-
 ```{r}
 df_merged_analysis %>%
   ggplot(aes(x = STAI_state_sum, y = STAI_trait_sum)) + 
@@ -415,14 +423,15 @@ df_merged_analysis %>%
 ```
 
 ## Visualize distributions of the variables
+
 ```{r}
 vars_to_plot <- df_merged_analysis %>%
   dplyr::select(-Participant.Public.ID) %>%
   colnames()
 ```
 
-
 Plotting distributions:
+
 ```{r}
 for (var in vars_to_plot) {
   plot <- ggplot(df_merged_analysis, aes(.data[[var]])) + 
@@ -436,10 +445,10 @@ for (var in vars_to_plot) {
 summary(df_merged_analysis)
 ```
 
-
 ### Check for normality of distributions
 
 Formal test (S-W):
+
 ```{r}
 df_merged_analysis %>%
   summarise(across(where(is.numeric), ~ shapiro.test(.)$p.value)) %>%
@@ -448,6 +457,7 @@ df_merged_analysis %>%
 ```
 
 Visual inspection with QQplots:
+
 ```{r}
 numeric_cols <- df_merged_analysis %>% 
   dplyr::select(where(is.numeric)) %>%
@@ -460,7 +470,6 @@ for(col_name in names(numeric_cols)){
 ```
 
 **Several variables have non-normal distribution, thus we should use Spearman correlation in our bivariate correlation analyses!**
-
 
 Let's visualise NAs as well. We need to transform the results to characters and plot with geom_bar used for factors/categories.
 
@@ -486,6 +495,7 @@ for (var in vars_to_plot) {
 ## Correlations (bivariate; correlation matrix)
 
 Create a correlation test to use for matrix:
+
 ```{r}
 corr_matrix <- df_merged_analysis %>%
   dplyr::select(-c(age.year, gender.quantised, Participant.Public.ID, STAI_trait_sum, RRS_total_score, MAAS_total, CAMSR_total_score)) %>%
@@ -494,6 +504,7 @@ corr_matrix <- df_merged_analysis %>%
 ```
 
 Uncorrected p-values matrix:
+
 ```{r}
 var_names <- c( "Mind-wandering (MWQ)", "Shizotypy (MSS-B)", "OCD (OCI-R)", "Autism spectrum (AQ)", "ADHD (ASRS)", "Depression (BDI shortened)",  "Eating disorder (EAT)", "Hypomania (HCL-32)", "Anxiety (STAI state)")
 
@@ -515,7 +526,6 @@ corrplot(
 )
 ```
 
-
 ```{r}
 # ----------------------------
 # 2️⃣ Bonferroni-adjusted correlations
@@ -534,8 +544,8 @@ corrplot(
 )
 ```
 
-
 Trying ggcorrplot:
+
 ```{r}
 r_mat <- corr_matrix$r
 p_mat <- corr_matrix$p
@@ -566,10 +576,10 @@ corr_matrix_ggplot <- ggcorrplot(corr_matrix$r,
 corr_matrix_ggplot
 ```
 
-
 ## Regression analysis
 
 Clean the dataset completely - **at this point 1 observation is removed due to missing BDI values** - not imputed in this version of the analysis!
+
 ```{r}
 df_merged_analysis_clean <- df_merged_analysis %>%
   dplyr::select(-c(age.year, gender.quantised, Participant.Public.ID, STAI_trait_sum, RRS_total_score, MAAS_total, CAMSR_total_score)) %>%
@@ -579,18 +589,20 @@ glimpse(df_merged_analysis_clean)
 ```
 
 Let's scale (standardise) all the numeric variables.
+
 ```{r}
 df_merged_analysis_clean_std <- df_merged_analysis_clean %>%
   mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
 ```
 
 Check the data
+
 ```{r}
 glimpse(df_merged_analysis_clean_std)
 ```
 
-
 Multiple regression:
+
 ```{r}
 reg_model <- lm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_score 
 + ASRS_total_score + BDI_shorten_total_score + EAT_total_score + HCL32_total_score + STAI_state_sum, data = df_merged_analysis_clean_std)
@@ -599,17 +611,19 @@ summary(reg_model)
 ```
 
 Create a nice tab for the results WITHOUT adjustment (for comparison):
+
 ```{r}
 tab_model(reg_model)
 ```
 
-
 Create a nice tab for the results and use **bonferroni adjustment**!
+
 ```{r}
 tab_model(reg_model, p.adjust = "bonferroni")
 ```
 
 Plot model estimates:
+
 ```{r}
 plot_model(reg_model, type = "est", p.adjust = "bonferroni", show.value = TRUE, value.offset = 0.35) + 
   theme_minimal() + 
@@ -622,11 +636,13 @@ plot_model(reg_model, type = "est", p.adjust = "bonferroni", show.value = TRUE, 
 #### Influential points
 
 Cook's distance - using rule of thumb: threshold = 4/n observations.
+
 ```{r}
 plot(reg_model, 4)
 abline(h = 4/nrow(df_merged_analysis_clean_std), col = "red") 
 ```
-Several points are over the arbitrary threshold for Cook's distance. Especially 3 observations have severe values (observations: 13, 116, 130). Let's isolate these points and check their values in various questionnaires. 
+
+Several points are over the arbitrary threshold for Cook's distance. Especially 3 observations have severe values (observations: 13, 116, 130). Let's isolate these points and check their values in various questionnaires.
 
 ```{r}
 augment(reg_model) %>% 
@@ -634,13 +650,15 @@ augment(reg_model) %>%
   relocate(row_n, 1) %>%
   filter(row_n %in% c(13, 116, 130))
 ```
+
 Let's plot all the prediction plots and try to identify these points. They seem to have severe deviation in:
 
-- **Row 13**: -3.22 SD below mean of MWQ, 6.73 SD over mean STAI state
-- **Row 116**: -3.22 SD below mean of MWQ
-- **Row 130** 3.73 SD over mean ASRS score
+-   **Row 13**: -3.22 SD below mean of MWQ, 6.73 SD over mean STAI state
+-   **Row 116**: -3.22 SD below mean of MWQ
+-   **Row 130** 3.73 SD over mean ASRS score
 
 Plotting:
+
 ```{r}
 plot_model(reg_model, type = "pred", show.data = TRUE)
 ```
@@ -658,22 +676,29 @@ Yes, observation 13 is definitely a severe outlier and should be removed from th
 #### Checking model assumptions
 
 Check model for violation of assumptions:
+
 ```{r}
 check_model(reg_model)
 ```
+
 **Check normality of residuals**
 
 Test:
+
 ```{r}
 check_normality(reg_model)
 ```
+
 Plot:
+
 ```{r}
 plot(reg_model, 2)
 ```
+
 **Check for homoscedasticity**
 
 Test
+
 ```{r}
 check_heteroscedasticity(reg_model)
 ```
@@ -689,25 +714,26 @@ augment(reg_model) %>%
   arrange(desc(.fitted))
 ```
 
-We can see that the "problematic" point detected in visual inspection on the homogeneity of variance plot is observation 130. Again, I think that all these inspections suggest we remove 13 and 130 from the data. 
+We can see that the "problematic" point detected in visual inspection on the homogeneity of variance plot is observation 130. Again, I think that all these inspections suggest we remove 13 and 130 from the data.
 
-**Check for multicolinearity**
-Test
+**Check for multicolinearity** Test
+
 ```{r}
 check_collinearity(reg_model)
 ```
 
 Visualise:
+
 ```{r}
 check_collinearity(reg_model) |> plot()
 ```
 
-**Summary**: based on the visual inspection and formal tests, I suggest we create another model from which two influential points are removed (observations 13 and 130), check all the assumptions and then compare model performance. 
-
+**Summary**: based on the visual inspection and formal tests, I suggest we create another model from which two influential points are removed (observations 13 and 130), check all the assumptions and then compare model performance.
 
 ## Additional regression analysis with removed influential points
 
 Remove influential points from the dataset - rows 13 and 130.
+
 ```{r}
 influential_points <- c(13, 130)
 df_merged_analysis_clean_std_rem_infl <- df_merged_analysis_clean_std %>%
@@ -717,6 +743,7 @@ df_merged_analysis_clean_std_rem_infl <- df_merged_analysis_clean_std %>%
 **Repeat all the steps:**
 
 Multiple regression:
+
 ```{r}
 reg_model_removed_influentials <- lm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_score 
 + ASRS_total_score + BDI_shorten_total_score + EAT_total_score + HCL32_total_score + STAI_state_sum, data = df_merged_analysis_clean_std_rem_infl)
@@ -725,17 +752,19 @@ summary(reg_model_removed_influentials)
 ```
 
 Create a nice tab for the results WITHOUT adjustment (for comparison):
+
 ```{r}
 tab_model(reg_model_removed_influentials, show.stat = TRUE)
 ```
 
-
 Create a nice tab for the results and use **bonferroni adjustment**!
+
 ```{r}
 tab_model(reg_model_removed_influentials, p.adjust = "bonferroni", digits = 3, show.se = TRUE, title = "Model for full dataset with removed influential points + Bonferroni adjustment")
 ```
 
 Plot model estimates:
+
 ```{r}
 plot_model(reg_model_removed_influentials, type = "est", p.adjust = "bonferroni", show.value = TRUE, value.offset = 0.35) + 
   theme_minimal() + 
@@ -748,20 +777,22 @@ plot_model(reg_model_removed_influentials, type = "est", p.adjust = "bonferroni"
 #### Influential points
 
 Cook's distance - using rule of thumb: threshold = 4/n observations. *As removing the points and using such visualisation is basically a recursive process, we can see that after removing 2 influential points in the previous step, there is nor much larger deviation in Cook's distances.*
+
 ```{r}
 plot(reg_model_removed_influentials, 4)
 abline(h = 4/nrow(df_merged_analysis_clean_std_rem_infl), col = "red") 
 ```
 
 Plotting:
+
 ```{r}
 plot_model(reg_model_removed_influentials, type = "pred", show.data = TRUE)
 ```
 
 Much better, no evident extreme outliers! **However, possibly non-linear relationship in MSS-B and OCI-R?**
 
-
 Let's check other indices of the model.
+
 ```{r}
 plot(reg_model_removed_influentials, which = c(5,6))
 ```
@@ -774,20 +805,22 @@ Much better.
 check_model(reg_model_removed_influentials)
 ```
 
+**Check normality of residuals** Test:
 
-**Check normality of residuals**
-Test:
 ```{r}
 check_normality(reg_model_removed_influentials) |> plot()
 ```
+
 Plot:
+
 ```{r}
 plot(reg_model_removed_influentials, 2)
 ```
+
 While formal test suggest non-normality, visual inspection is not that horrible. Maybe we should discuss this in more details!
 
-**Check for homoscedasticity**
-Test
+**Check for homoscedasticity** Test
+
 ```{r}
 check_heteroscedasticity(reg_model_removed_influentials)
 ```
@@ -795,7 +828,8 @@ check_heteroscedasticity(reg_model_removed_influentials)
 ```{r}
 check_heteroscedasticity(reg_model_removed_influentials) |> plot()
 ```
-Now there seem to be some points with negative fitted values that affect homoscedasticity, however not severly. Still, let's see which points are they (perhaps 116 from the previous dataset, which would now be 115). 
+
+Now there seem to be some points with negative fitted values that affect homoscedasticity, however not severly. Still, let's see which points are they (perhaps 116 from the previous dataset, which would now be 115).
 
 ```{r}
 augment(reg_model_removed_influentials) %>% 
@@ -803,21 +837,22 @@ augment(reg_model_removed_influentials) %>%
   relocate(row_n, 1) %>%
   arrange(.fitted)
 ```
-No, it is not previously discussed observation 116. I think that considering visual inspection and formal tests, there is no need to remove any additional data points. 
 
+No, it is not previously discussed observation 116. I think that considering visual inspection and formal tests, there is no need to remove any additional data points.
 
-**Check for multicolinearity**
-Test
+**Check for multicolinearity** Test
+
 ```{r}
 check_collinearity(reg_model_removed_influentials)
 ```
 
 Visualise:
+
 ```{r}
 check_collinearity(reg_model_removed_influentials) |> plot()
 ```
-Again, no issues with multicolinearity!
 
+Again, no issues with multicolinearity!
 
 ## Model comparison
 
@@ -827,28 +862,21 @@ Let us now compare the initial model (`reg_model`) and the second model, where 2
 compare_performance(reg_model, reg_model_removed_influentials)
 ```
 
-**We can see that there is no significant difference in model performance, so we can still think about whether to stick to the model with all the datapoints or stick to the model with removed datapoints.** While I did identify them as influential according to arbitrary thresholds, both models passed assumptions of multicolinearity and homoscedasticity, however both had slight issues in passing assumption of normality. 
+**We can see that there is no significant difference in model performance, so we can still think about whether to stick to the model with all the datapoints or stick to the model with removed datapoints.** While I did identify them as influential according to arbitrary thresholds, both models passed assumptions of multicolinearity and homoscedasticity, however both had slight issues in passing assumption of normality.
 
-**At this point it might be sensible to try a more robust modelling approach with `rlm()` from `MASS` package. 
+\*\*At this point it might be sensible to try a more robust modelling approach with `rlm()` from `MASS` package.
 
-**Reason:** A few extreme or highly influential points in the data
-can disproportionately affect the estimates in lm models.
+**Reason:** A few extreme or highly influential points in the data can disproportionately affect the estimates in lm models.
 
-`rlm()` from the `MASS` package implements robust regression using **M-estimation**.
-This downweights the influence of outliers automatically, producing 
-more stable and reliable coefficient estimates without removing data points.
+`rlm()` from the `MASS` package implements robust regression using **M-estimation**. This downweights the influence of outliers automatically, producing more stable and reliable coefficient estimates without removing data points.
 
-Difference from `lm()`:
-- `lm()` minimizes the sum of squared residuals; large residuals have a big effect.
-- `rlm()` minimizes a weighted sum, reducing the impact of extreme values.
-- Coefficients may differ slightly from `lm()` if outliers exist.
-- Standard errors and p-values are handled differently; **robust SEs can be computed separately.**
+Difference from `lm()`: - `lm()` minimizes the sum of squared residuals; large residuals have a big effect. - `rlm()` minimizes a weighted sum, reducing the impact of extreme values. - Coefficients may differ slightly from `lm()` if outliers exist. - Standard errors and p-values are handled differently; **robust SEs can be computed separately.**
 
 **In short**: `rlm()` helps ensure that a few unusual observations don't distort the model.
 
 ## Additional regression - Robust linear model using rlm()
 
-In order to see whether it makes more sense to use robust lm or continue with the model where influential points were removed, let's fit the robust lm on original clean dataset with all 450 observations. 
+In order to see whether it makes more sense to use robust lm or continue with the model where influential points were removed, let's fit the robust lm on original clean dataset with all 450 observations.
 
 ```{r}
 rlm_model <- rlm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_score 
@@ -856,11 +884,13 @@ rlm_model <- rlm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_sco
 ```
 
 See the model summary:
+
 ```{r}
 summary(rlm_model)
 ```
 
 We have to calculate robust SEs and p-values separately.
+
 ```{r}
 coeftest(rlm_model, vcov = vcovHC(rlm_model, type = "HC3"))
 ```
@@ -880,10 +910,10 @@ robust_summary_df <- data.frame(
 robust_summary_df
 ```
 
-
 # REDUCED DATA ANALYSIS - SAMPLE WITHOUT DIAGNOSED/MEDICATED PARTICIPANTS
 
 Select only relevant columns from merged dataset:
+
 ```{r}
 df_merged_exc_analysis <- df_merged_clean_exc %>%
   dplyr::select(Participant.Public.ID,
@@ -904,7 +934,6 @@ df_merged_exc_analysis <- df_merged_clean_exc %>%
          age.year)
 ```
 
-
 ## STAI state and trait correlations
 
 Calculate correlation between STAI state and STAI trait
@@ -916,7 +945,6 @@ cor(df_merged_exc_analysis$STAI_state_sum, df_merged_exc_analysis$STAI_trait_sum
 ```{r}
 cor.test(df_merged_exc_analysis$STAI_state_sum, df_merged_exc_analysis$STAI_trait_sum, method = "spearman")
 ```
-
 
 ```{r}
 df_merged_exc_analysis %>%
@@ -930,6 +958,7 @@ df_merged_exc_analysis %>%
 ## Visualize distributions of the variables
 
 Plotting distributions:
+
 ```{r}
 for (var in vars_to_plot) {
   plot <- ggplot(df_merged_exc_analysis, aes(.data[[var]])) + 
@@ -955,6 +984,7 @@ summarise_data <- function(df) {
 ```
 
 Let's compare summaries of the two datasets (full and reduced):
+
 ```{r}
 bind_rows(
   full_df = summarise_data(df_merged_analysis),
@@ -965,10 +995,52 @@ bind_rows(
   tidyr::pivot_wider(names_from = dataset, values_from = value)
 ```
 
+Boxplot comparison:
+```{r}
+boxplot_dataset_comparison <- df_merged_analysis %>%
+  # 1. Add diagnosed column
+  mutate(diagnosed = ifelse(Participant.Public.ID %in% diag_meds_ids, 1, 0)) %>%
+  dplyr::select(-age.year) %>%
+  
+  # 2. Keep only numeric columns and add diagnosed back
+  select_if(is.numeric) %>%
+
+  mutate(diagnosed = ifelse(row_number() %in% which(df_merged_analysis$Participant.Public.ID %in% diag_meds_ids), 1, 0)) %>%
+  
+  # 3. Pivot longer
+  pivot_longer(
+    cols = -diagnosed,
+    names_to = "questionnaire",
+    values_to = "score"
+  ) %>%
+  
+  # 4. Label diagnosed
+  mutate(diagnosed = factor(diagnosed,
+                            levels = c(0, 1),
+                            labels = c("No Diagnosis/Medication", "With Diagnosis/Medication"))) %>%
+  
+  # 5. Plot
+  ggplot(aes(x = questionnaire, y = score, fill = questionnaire)) +
+  geom_boxplot(outlier.shape = 21, alpha = 0.8) +
+  facet_wrap(~ diagnosed, ncol = 1, scales = "free_y") +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold", size = 12)
+  ) +
+  labs(
+    title = "Questionnaire Scores by Diagnosis Status",
+    x = "Questionnaire",
+    y = "Score"
+  ) + 
+  coord_flip()
+```
 
 ### Check for normality of distributions
 
 Formal test (S-W):
+
 ```{r}
 df_merged_exc_analysis %>%
   summarise(across(where(is.numeric), ~ shapiro.test(.)$p.value)) %>%
@@ -977,6 +1049,7 @@ df_merged_exc_analysis %>%
 ```
 
 Visual inspection with QQplots:
+
 ```{r}
 numeric_cols_exc <- df_merged_exc_analysis %>% 
   dplyr::select(where(is.numeric)) %>%
@@ -989,7 +1062,6 @@ for(col_name in names(numeric_cols_exc)){
 ```
 
 **Several variables have non-normal distribution, thus we should use Spearman correlation in our bivariate correlation analyses!**
-
 
 Let's visualise NAs as well. We need to transform the results to characters and plot with geom_bar used for factors/categories.
 
@@ -1015,6 +1087,7 @@ for (var in vars_to_plot) {
 ## Correlations (bivariate; correlation matrix)
 
 Create a correlation test to use for matrix:
+
 ```{r}
 corr_matrix_exc <- df_merged_exc_analysis %>%
   dplyr::select(-c(age.year, gender.quantised, Participant.Public.ID, STAI_trait_sum, RRS_total_score, MAAS_total, CAMSR_total_score)) %>%
@@ -1023,6 +1096,7 @@ corr_matrix_exc <- df_merged_exc_analysis %>%
 ```
 
 Uncorrected p-values matrix:
+
 ```{r}
 var_names <- c( "Mind-wandering (MWQ)", "Shizotypy (MSS-B)", "OCD (OCI-R)", "Autism spectrum (AQ)", "ADHD (ASRS)", "Depression (BDI shortened)",  "Eating disorder (EAT)", "Hypomania (HCL-32)", "Anxiety (STAI state)")
 
@@ -1044,7 +1118,6 @@ corrplot(
 )
 ```
 
-
 ```{r}
 # ----------------------------
 # 2️⃣ Bonferroni-adjusted correlations
@@ -1063,8 +1136,8 @@ corrplot(
 )
 ```
 
-
 Trying ggcorrplot:
+
 ```{r}
 r_mat_exc <- corr_matrix_exc$r
 p_mat_exc <- corr_matrix_exc$p
@@ -1101,11 +1174,13 @@ Let's compare ggcorrplots of full and reduced datasets:
 corr_matrix_ggplot
 corr_matrix_exc_ggplot
 ```
+
 **In reduced dataset there are slightly stronger correlations between MW and ASRS, OCI-R and MSS-B; however slightly weaker correlation with HCL-32. Despite these slight differences, when p-adjustment is applied, the same bivariate correlations remain significant.**
 
 ## Regression analysis
 
 Clean the dataset completely - **at this point 1 observation is removed due to missing BDI values** - not imputed in this version of the analysis!
+
 ```{r}
 df_merged_exc_analysis_clean <- df_merged_exc_analysis %>%
   dplyr::select(-c(age.year, gender.quantised, Participant.Public.ID, STAI_trait_sum, RRS_total_score, MAAS_total, CAMSR_total_score)) %>%
@@ -1115,18 +1190,20 @@ glimpse(df_merged_exc_analysis_clean)
 ```
 
 Let's scale (standardise) all the numeric variables.
+
 ```{r}
 df_merged_exc_analysis_clean_std <- df_merged_exc_analysis_clean %>%
   mutate(across(where(is.numeric), ~ as.numeric(scale(.))))
 ```
 
 Check the data
+
 ```{r}
 glimpse(df_merged_exc_analysis_clean_std)
 ```
 
-
 Multiple regression:
+
 ```{r}
 reg_model_exc <- lm(mwq_total_score ~ MSSB_total + OCI_R_total_score + AQ_total_score 
 + ASRS_total_score + BDI_shorten_total_score + EAT_total_score + HCL32_total_score + STAI_state_sum, data = df_merged_exc_analysis_clean_std)
@@ -1135,26 +1212,27 @@ summary(reg_model_exc)
 ```
 
 Create a nice tab for the results WITHOUT adjustment (for comparison):
+
 ```{r}
 tab_model(reg_model_exc)
 ```
 
-
 Create a nice tab for the results and use **bonferroni adjustment**!
+
 ```{r}
 tab_model(reg_model_exc, p.adjust = "bonferroni")
 ```
 
-
 And let's compare the basic model from full dataset (`reg_model`) and current model on reduced dataset (`reg_model_exc`).
+
 ```{r}
 tab_model(reg_model,
           reg_model_exc,
           p.adjust = "bonferroni")
 ```
 
-
 Plot model estimates:
+
 ```{r}
 plot_model(reg_model_exc, type = "est", p.adjust = "bonferroni", show.value = TRUE, value.offset = 0.35) + 
   theme_minimal() + 
@@ -1167,10 +1245,12 @@ plot_model(reg_model_exc, type = "est", p.adjust = "bonferroni", show.value = TR
 #### Influential points
 
 Cook's distance - using rule of thumb: threshold = 4/n observations.
+
 ```{r}
 plot(reg_model_exc, 4)
 abline(h = 4/nrow(df_merged_exc_analysis_clean_std), col = "red") 
 ```
+
 Several points are over the arbitrary threshold for Cook's distance. However, comparing the relative differences, no particular observation really stands out, so probably removing influential points is not necessary in the reduced dataset.
 
 ```{r}
@@ -1180,8 +1260,8 @@ Several points are over the arbitrary threshold for Cook's distance. However, co
 #  filter(row_n %in% c(13, 116, 130))
 ```
 
-
 Plotting:
+
 ```{r}
 plot_model(reg_model_exc, type = "pred", show.data = TRUE)
 ```
@@ -1197,22 +1277,25 @@ Some observations stand out - 71, 125, 318, which were also highlighted in Cook'
 #### Checking model assumptions
 
 Check model for violation of assumptions:
+
 ```{r}
 check_model(reg_model_exc)
 ```
 
-**Check normality of residuals**
-Test:
+**Check normality of residuals** Test:
+
 ```{r}
 check_normality(reg_model_exc)
 ```
+
 Plot:
+
 ```{r}
 plot(reg_model_exc, 2)
 ```
 
-**Check for homoscedasticity**
-Test
+**Check for homoscedasticity** Test
+
 ```{r}
 check_heteroscedasticity(reg_model_exc)
 ```
@@ -1228,40 +1311,40 @@ augment(reg_model_exc) %>%
   arrange(desc(.fitted))
 ```
 
-We can see that the despite passing the formal test, visualisation suggest some points affecting homoscedasticity. Influential point at the positive extreme are observations 318 and 163 and at the negative extreme 329 and 241. However, these points are not concretely extreme and are within expected bounds, so based on visualisations and tests I again suggest no removal of observations. 
+We can see that the despite passing the formal test, visualisation suggest some points affecting homoscedasticity. Influential point at the positive extreme are observations 318 and 163 and at the negative extreme 329 and 241. However, these points are not concretely extreme and are within expected bounds, so based on visualisations and tests I again suggest no removal of observations.
 
 ```{r}
 check_outliers(reg_model_exc) |> plot()
 ```
 
-**Check for multicolinearity**
-Test
+**Check for multicolinearity** Test
+
 ```{r}
 check_collinearity(reg_model_exc)
 ```
 
 Visualise:
+
 ```{r}
 check_collinearity(reg_model_exc) |> plot()
 ```
 
-**Summary**: based on the visual inspection and formal tests, I suggest no removal of observations and keep this regression model as the main model for reduced dataset. 
-
+**Summary**: based on the visual inspection and formal tests, I suggest no removal of observations and keep this regression model as the main model for reduced dataset.
 
 # Tab for all models created so far
 
 In this tab three models are plotted:
 
-- initial model on full dataset (`reg_model`)
-- updated model on full dateset with removed 2 influential points (`reg_model_removed_influentials`)
-- model for reduced dataset - no diagnosed/medicated participants (`reg_model_exc`)
-
+-   initial model on full dataset (`reg_model`)
+-   updated model on full dateset with removed 2 influential points (`reg_model_removed_influentials`)
+-   model for reduced dataset - no diagnosed/medicated participants (`reg_model_exc`)
 
 **Note:** `rlm()` model on full dataset cannot be visualised in the same tab because `tab_model()` does not support `rlm()` models.
 
 In order to compare them, summary of `rlm()` model on full dataset (no influential points removed) is pasted below.
 
 Tab for `lm()` models:
+
 ```{r}
 tab_model(reg_model,
           reg_model_removed_influentials,
@@ -1276,9 +1359,711 @@ tab_model(reg_model,
           title = "3 models predicting MWQ score. p-values for all models were adjusted (Bonferroni).")
 ```
 
-
 Summary of `rlm()`:
+
 ```{r}
 robust_summary_df
 ```
+
+
+
+
+# Short report for the meeting (OCT6) with Peti and Bianka
+
+Data preprocessing:
+
+- 709 observations in complete dataset 
+- 237 participants/rows/obervations were deleted as they lack MWQ responses. **Remaining after this step: 472**
+- 21 participants removes as majority of questionnaires is missing (impossible to impute missing values)
+- 73 participants removed due to medication/diagnoses
+- 1 additional participant removed due to missing BDI score (both datasets)
+
+Final sizes:
+
+- FULL = 450 observations
+- Reduced = 377 observations
+
+**Questions:**
+
+- should we remove datapoints for questionnaires due to innattention?
+- If we remove those datapoints, do we do pairwise deletion or impute deleted/missing data?
+
+COMPARING DATASETS (full and reduced):
+```{r}
+bind_rows(
+  full_df = summarise_data(df_merged_analysis),
+  reduced_df = summarise_data(df_merged_exc_analysis),
+  .id = "dataset"
+) %>%
+  pivot_longer(-dataset) %>% 
+  pivot_wider(names_from = dataset, values_from = value) %>%
+  kable(caption = "Comparison of Full and Reduced (no meds/diag) Datasets", digits = 2, align = "lcc") %>%
+  kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+```{r}
+boxplot_dataset_comparison
+```
+
+
+Comparing STAI train and state, since STAI trait is missing in a lot of participants - models so far only include state. Correlations between state and trait:
+Full data:
+```{r}
+cor(df_merged_analysis$STAI_state_sum, df_merged_analysis$STAI_trait_sum, use = "complete.obs", method = "spearman")
+```
+
+Reduced data:
+```{r}
+cor(df_merged_exc_analysis$STAI_state_sum, df_merged_exc_analysis$STAI_trait_sum, use = "complete.obs", method = "spearman")
+```
+
+ANALYSIS: 
+FULL DATA:
+
+Bivariate correlation table:
+```{r}
+corr_matrix_ggplot
+```
+
+
+REDUCED DATA:
+Bivariate correlations:
+```{r}
+corr_matrix_exc_ggplot
+```
+
+
+For **REGRESSION** I constructed various models:
+
+-   initial model on full dataset (`reg_model`)
+-   updated model on full dateset with removed 2 influential points (`reg_model_removed_influentials`)
+-   model for reduced dataset - no diagnosed/medicated participants (`reg_model_exc`)
+
+**Note:** `rlm()` model on full dataset cannot be visualised in the same tab because `tab_model()` does not support `rlm()` models.
+
+In order to compare them, summary of `rlm()` model on full dataset (no influential points removed) is pasted below.
+
+Tab for `lm()` models:
+
+```{r}
+tab_model(reg_model,
+          reg_model_removed_influentials,
+          reg_model_exc, 
+          show.se = TRUE,
+          show.ci = FALSE,
+          show.stat = TRUE,
+          show.df = TRUE,
+          digits = 3,
+          p.adjust = "bonferroni",
+          dv.labels = c("MWQ predictions on full data", "MWQ predictions on full data with 2 influentail points removed", "MWQ predictions on reduced data"),
+          title = "3 models predicting MWQ score. p-values for all models were adjusted (Bonferroni).")
+```
+
+Summary of `rlm()`:
+
+```{r}
+robust_summary_df
+```
+
+
+**What should be next steps:**
+
+- Repeat Bayesian regression as in the first version of the manuscript?
+- Try network analysis?
+- Should we go into SEM.....?
+
+
+
+# ADDITIONAL ANALYSIS (after OCT 10)
+
+We have to calculate scores for specific subscales of different questionnaires, as they were not calculated for all participants.
+
+MSSB
+```{r}
+mssb_positive <- c(
+  "MSSB_2",
+  "MSSB_5",
+  "MSSB_8",
+  "MSSB_11",
+  "MSSB_14",
+  "MSSB_17",
+  "MSSB_20",
+  "MSSB_23",
+  "MSSB_26",
+  "MSSB_29",
+  "MSSB_32",
+  "MSSB_35",
+  "MSSB_38"
+)
+
+mssb_negative <- c(
+  "MSSB_1",
+  "MSSB_4",
+  "MSSB_7",
+  "MSSB_10",
+  "MSSB_13",
+  "MSSB_16",
+  "MSSB_19",
+  "MSSB_22",
+  "MSSB_25",
+  "MSSB_28",
+  "MSSB_31",
+  "MSSB_34",
+  "MSSB_37"
+)
+
+mssb_disorganised <- c(
+  "MSSB_3",
+  "MSSB_6",
+  "MSSB_9",
+  "MSSB_12",
+  "MSSB_15",
+  "MSSB_18",
+  "MSSB_21",
+  "MSSB_24",
+  "MSSB_27",
+  "MSSB_30",
+  "MSSB_33",
+  "MSSB_36"
+)
+```
+
+
+OCI-R
+```{r}
+oci_r_washing <- c(
+  "OCI_R_5",
+  "OCI_R_11",
+  "OCI_R_17"
+)
+
+oci_r_obsessing <- c(
+  "OCI_R_6",
+  "OCI_R_12",
+  "OCI_R_18"
+)
+
+oci_r_hoarding <- c(
+  "OCI_R_1",
+  "OCI_R_7",
+  "OCI_R_13"
+)
+
+oci_r_ordering <- c(
+  "OCI_R_3",
+  "OCI_R_9",
+  "OCI_R_15"
+)
+
+oci_r_checking <- c(
+  "OCI_R_2",
+  "OCI_R_8",
+  "OCI_R_14"
+)
+
+oci_r_neutralising <- c(
+  "OCI_R_4",
+  "OCI_R_10",
+  "OCI_R_16"
+)
+```
+
+
+ASRS
+
+```{r}
+asrs_hyper_impuls <- c(
+  "ASRS_5",
+  "ASRS_6",
+  "ASRS_12",
+  "ASRS_13",
+  "ASRS_14",
+  "ASRS_15",
+  "ASRS_16",
+  "ASRS_17",
+  "ASRS_18"
+)
+
+asrs_inattentive <- c(
+  "ASRS_1",
+  "ASRS_2",
+  "ASRS_3",
+  "ASRS_4",
+  "ASRS_7",
+  "ASRS_8",
+  "ASRS_9",
+  "ASRS_10",
+  "ASRS_11"
+)
+```
+
+EAT-26
+
+```{r}
+eat_dieting <- c(
+  "EAT_1",
+  "EAT_6",
+  "EAT_7",
+  "EAT_10",
+  "EAT_11",
+  "EAT_12",
+  "EAT_14",
+  "EAT_16",
+  "EAT_17",
+  "EAT_22",
+  "EAT_23",
+  "EAT_24",
+  "EAT_26"
+)
+
+eat_bul_foodpreoc <- c(
+  "EAT_3",
+  "EAT_4",
+  "EAT_9",
+  "EAT_18",
+  "EAT_21",
+  "EAT_25"
+)
+
+eat_oral_ctrl <- c(
+  "EAT_2",
+  "EAT_5",
+  "EAT_8",
+  "EAT_13",
+  "EAT_15",
+  "EAT_19",
+  "EAT_20"
+)
+```
+
+HCL-32
+
+```{r}
+hcl_active <- c(
+  "HCL32_2",
+  "HCL32_3",
+  "HCL32_4",
+  "HCL32_5",
+  "HCL32_6",
+  "HCL32_10",
+  "HCL32_11",
+  "HCL32_12",
+  "HCL32_13",
+  "HCL32_15",
+  "HCL32_16",
+  "HCL32_19",
+  "HCL32_20",
+  "HCL32_22",
+  "HCL32_24",
+  "HCL32_28"
+)
+
+hcl_irritable <- c(
+  "HCL32_7",
+  "HCL32_8",
+  "HCL32_9",
+  "HCL32_21",
+  "HCL32_25",
+  "HCL32_26",
+  "HCL32_27",
+  "HCL32_31",
+  "HCL32_32"
+)
+```
+
+
+## Calculating subscale scores
+
+```{r}
+df_merged_clean_subscales <- df_merged_clean %>%
+  mutate(MSSB_positive = rowSums(across(all_of(mssb_positive)))) %>%
+  mutate(MSSB_negative = rowSums(across(all_of(mssb_negative)))) %>%
+  mutate(MSSB_disorganised = rowSums(across(all_of(mssb_disorganised)))) %>%
+  
+  mutate(OCI_R_hoard = rowSums(across(all_of(oci_r_hoarding)))) %>%
+  mutate(OCI_R_wash = rowSums(across(all_of(oci_r_washing)))) %>%
+  mutate(OCI_R_obsess = rowSums(across(all_of(oci_r_obsessing)))) %>%
+  mutate(OCI_R_order = rowSums(across(all_of(oci_r_ordering)))) %>%
+  mutate(OCI_R_check = rowSums(across(all_of(oci_r_checking)))) %>%
+  mutate(OCI_R_neutral = rowSums(across(all_of(oci_r_neutralising)))) %>%
+  
+  mutate(ASRS_hyper_impulse = rowSums(across(all_of(asrs_hyper_impuls)))) %>%
+  mutate(ASRS_inattentive = rowSums(across(all_of(asrs_inattentive)))) %>%
+  
+  mutate(EAT_diet = rowSums(across(all_of(eat_dieting)))) %>%
+  mutate(EAT_bul_foodpreoc = rowSums(across(all_of(eat_bul_foodpreoc)))) %>%
+  mutate(EAT_oral_ctrl = rowSums(across(all_of(eat_oral_ctrl)))) %>%
+  
+  mutate(HCL32_act = rowSums(across(all_of(hcl_active)))) %>%
+  mutate(HCL32_irrit = rowSums(across(all_of(hcl_irritable))))
+```
+
+Check that previously calculated subscales match the new caluclations:
+
+MSS-B and ASRS (as there are all datapoints in both versions):
+```{r}
+df_merged_clean_subscales %>%
+  summarise(total_cases = n(),
+    asrs_hyperactive_match = sum(ASRS_hyper_impulse == ASRS_hyperactivity),
+            asrs_inattentice_match = sum(ASRS_inattentive == ASRS_attention),
+            mssb_pos_match = sum(MSSB_positive == MSSB_pos),
+            mssb_neg_match = sum(MSSB_negative == MSSB_neg),
+            mssb_dis_match = sum(MSSB_disorganised == MSSB_dis)) %>%
+  t()
+```
+
+
+```{r}
+df_merged_clean_subscales %>%
+  filter(!is.na(HCL32_active)) %>%
+  summarise(total_cases = n(),
+            hcl_act_match = sum(HCL32_active == HCL32_act),
+            hcl_irr_match = sum(HCL32_irritable == HCL32_irrit),
+            
+            oci_hoard_match = sum(OCI_R_hoarding == OCI_R_hoard),
+            oci_wash_match = sum(OCI_R_washing == OCI_R_wash),
+            oci_obsess_match = sum(OCI_R_obsessing == OCI_R_obsess),
+            oci_order_match = sum(OCI_R_ordering == OCI_R_order),
+            oci_neutral_match = sum(OCI_R_neutralizing == OCI_R_neutral),
+            oci_check_match = sum(OCI_R_checking == OCI_R_check),
+            
+            eat_diet_match = sum(EAT_dieting == EAT_diet),
+            eat_bulimia_match = sum(EAT_bulimia == EAT_bul_foodpreoc),
+            eat_oral_ctrl_match = sum(EAT_oral_control == EAT_oral_ctrl),
+            ) %>%
+  t()
+  
+```
+
+**IMPROTANT**: values in EAT_ subscales are not matching in all cases, need to check with Bianka how she calculated the scores. I followed this resource: https://www.eat-26.com/wp-content/uploads/2021/02/EAT-26IntpretScoring-Test-11-1-17.pdf. 
+
+
+At this step, let's finalise the dataset for the analysis. We will do:
+
+- Keep variables of interest (MWQ, STAI_state, MSSB, OCI-R, AQ, HCL32, BDI, EAT, and all required subscales)
+- Remove rows with NAs (should be only 1 observation with missing BDI score)
+
+Final full dataset:
+```{r}
+df_full_for_exporting <- df_merged_clean_subscales %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_total_score, ASRS_hyper_impulse, ASRS_inattentive,
+                MSSB_total, MSSB_positive, MSSB_negative, MSSB_disorganised,
+                AQ_total_score,
+                OCI_R_total_score, OCI_R_hoard, OCI_R_wash, 
+                OCI_R_obsess, OCI_R_order, OCI_R_check, OCI_R_neutral,
+                BDI_shorten_total_score,
+                HCL32_total_score, HCL32_act, HCL32_irrit,
+                EAT_total_score, EAT_diet, EAT_bul_foodpreoc, EAT_oral_ctrl,
+                STAI_state_sum) %>%
+  na.omit()
+```
+
+
+Final reduced dataset:
+```{r}
+df_reduced_for_exporting <- df_merged_clean_subscales %>%
+  filter(!Participant.Public.ID %in% diag_meds_ids) %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_total_score, ASRS_hyper_impulse, ASRS_inattentive,
+                MSSB_total, MSSB_positive, MSSB_negative, MSSB_disorganised,
+                AQ_total_score,
+                OCI_R_total_score, OCI_R_hoard, OCI_R_wash, 
+                OCI_R_obsess, OCI_R_order, OCI_R_check, OCI_R_neutral,
+                BDI_shorten_total_score,
+                HCL32_total_score, HCL32_act, HCL32_irrit,
+                EAT_total_score, EAT_diet, EAT_bul_foodpreoc, EAT_oral_ctrl,
+                STAI_state_sum) %>%
+  na.omit()
+```
+
+
+
+```{r}
+vis_miss(df_full_for_exporting)
+```
+
+## Repeat correlations without STAI state
+
+### Full data analysis
+
+Run a correlation test to use for matrix
+```{r}
+corr_matrix_no_stai_full <- df_full_for_exporting %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_total_score,
+                MSSB_total,
+                AQ_total_score,
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+ mutate(across(everything(), scale)) %>%
+  rename("Mind-wandering (MWQ)"          = mwq_total_score,
+         "ADHD (ASRS)"                   = ASRS_total_score,
+         "Shizotypy (MSS-B)"             = MSSB_total,
+         "Autism spectrum (AQ)"          = AQ_total_score,
+         "OCD (OCI-R)"                   = OCI_R_total_score,
+         "Depression (BDI shortened)"    = BDI_shorten_total_score,
+         "Hypomania (HCL-32)"            = HCL32_total_score,
+         "Eating disorder (EAT)"       = EAT_total_score) %>%
+  na.omit() %>%
+  corr.test(method = "spearman", adjust = "bonferroni")
+```
+
+Plotting the matrix:
+```{r}
+corr_matrix_no_stai_full_ggplot <- ggcorrplot(corr_matrix_no_stai_full$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_no_stai_full$p,        # pass p-values
+           sig.level = 0.05, 
+           insig = "blank", # threshold for significance,
+           lab_col = "black",
+           colors = c("red3", "white", "darkgreen")) +
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Correlation matrix of variable of interest", subtitle = "Below the diagonal, associations with insignificant unadjusted p-values were removed. \nAbove the diagonal, associations with insignificant adjusted p-values were removed.", caption = "Bonferroni correction used for p-value adjustment.") + 
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+
+corr_matrix_no_stai_full_ggplot
+```
+
+### Reduced data analysis (no diagnosed/medicated participants)
+
+Run a correlation test to use for matrix
+```{r}
+corr_matrix_no_stai_reduced <- df_reduced_for_exporting %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_total_score,
+                MSSB_total,
+                AQ_total_score,
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+ mutate(across(everything(), scale)) %>%
+  rename("Mind-wandering (MWQ)"          = mwq_total_score,
+         "ADHD (ASRS)"                   = ASRS_total_score,
+         "Shizotypy (MSS-B)"             = MSSB_total,
+         "Autism spectrum (AQ)"          = AQ_total_score,
+         "OCD (OCI-R)"                   = OCI_R_total_score,
+         "Depression (BDI shortened)"    = BDI_shorten_total_score,
+         "Hypomania (HCL-32)"            = HCL32_total_score,
+         "Eating disorder (EAT)"       = EAT_total_score) %>%
+  na.omit() %>%
+  corr.test(method = "spearman", adjust = "bonferroni")
+```
+
+Plotting the matrix:
+```{r}
+corr_matrix_no_stai_reduced_ggplot <- ggcorrplot(corr_matrix_no_stai_reduced$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_no_stai_reduced$p,        # pass p-values
+           sig.level = 0.05, 
+           insig = "blank", # threshold for significance,
+           lab_col = "black",
+           colors = c("red3", "white", "darkgreen")) +
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Correlation matrix of variable of interest", subtitle = "Below the diagonal, associations with insignificant unadjusted p-values were removed. \nAbove the diagonal, associations with insignificant adjusted p-values were removed.", caption = "Bonferroni correction used for p-value adjustment.") + 
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+
+corr_matrix_no_stai_reduced_ggplot
+```
+
+## NETWORK ANALYSIS
+### Full data
+
+```{r}
+# Load Libraries
+library(qgraph)
+library(bootnet)
+```
+
+#### Total scores
+```{r}
+df_network_analysis_tot_quest_full <- df_full_for_exporting %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_total_score,
+                MSSB_total,
+                AQ_total_score,
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+ mutate(across(everything(), scale)) %>%
+  rename("Mind-wandering (MWQ)"          = mwq_total_score,
+         "ADHD (ASRS)"                   = ASRS_total_score,
+         "Shizotypy (MSS-B)"             = MSSB_total,
+         "Autism spectrum (AQ)"          = AQ_total_score,
+         "OCD (OCI-R)"                   = OCI_R_total_score,
+         "Depression (BDI shortened)"    = BDI_shorten_total_score,
+         "Hypomania (HCL-32)"            = HCL32_total_score,
+         "Eating disorder (EAT)"         = EAT_total_score) 
+```
+
+```{r}
+# 2. Estimate Network
+network_tot_quest_full <- estimateNetwork(df_network_analysis_tot_quest_full, default = "EBICglasso")
+
+# 3. Visualize Network
+plot(network_tot_quest_full, layout = "spring", vsize = 8, label.cex = 1.5, posCol = "darkgreen", negCol = "red3", title = "Network analysis for total questionnaires (full dataset)")
+
+```
+```{r}
+# 4. Calculate Centrality
+#centrality(network_tot_quest_full)
+centralityPlot(network_tot_quest_full)
+
+```
+```{r}
+# 5. Bootstrap Accuracy
+boot_results_tot_quest_full <- bootnet(network_tot_quest_full, nBoots = 1000)
+plot(boot_results_tot_quest_full, labels = TRUE)
+```
+
+#### Subscales
+```{r}
+# 1. Load and Prepare Data
+df_network_analysis_full_subscales <- df_full_for_exporting %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_hyper_impulse, ASRS_inattentive,
+                MSSB_positive, MSSB_negative, MSSB_disorganised,
+                AQ_total_score,
+                OCI_R_hoard, OCI_R_wash, 
+                OCI_R_obsess, OCI_R_order, OCI_R_check, OCI_R_neutral,
+                BDI_shorten_total_score,
+                HCL32_act, HCL32_irrit,
+                EAT_diet, EAT_bul_foodpreoc, EAT_oral_ctrl) %>%
+ mutate(across(everything(), scale))
+```
+
+
+```{r}
+# 2. Estimate Network
+network_full_subscales <- estimateNetwork(df_network_analysis_full_subscales, default = "EBICglasso")
+
+plot(network_full_subscales, layout = "spring", vsize = 8, label.cex = 1.5, posCol = "darkgreen", negCol = "red3", title = "Network analysis for subscales (full dataset)")
+
+
+```
+
+```{r}
+# 4. Calculate Centrality
+centralityPlot(network_full_subscales)
+```
+
+```{r}
+# 5. Bootstrap Accuracy
+boot_results_subscales_full <- bootnet(network_full_subscales, nBoots = 1000)
+boot_plot <- plot(boot_results_subscales_full, labels = TRUE, interactive = TRUE)
+
+plotly::ggplotly(boot_plot, height = 2000)
+```
+
+
+### Reduced data
+
+#### Total scores
+```{r}
+df_network_analysis_tot_quest_reduced <- df_reduced_for_exporting %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_total_score,
+                MSSB_total,
+                AQ_total_score,
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+ mutate(across(everything(), scale)) %>%
+  rename("Mind-wandering (MWQ)"          = mwq_total_score,
+         "ADHD (ASRS)"                   = ASRS_total_score,
+         "Shizotypy (MSS-B)"             = MSSB_total,
+         "Autism spectrum (AQ)"          = AQ_total_score,
+         "OCD (OCI-R)"                   = OCI_R_total_score,
+         "Depression (BDI shortened)"    = BDI_shorten_total_score,
+         "Hypomania (HCL-32)"            = HCL32_total_score,
+         "Eating disorder (EAT)"         = EAT_total_score) 
+```
+
+```{r}
+# 2. Estimate Network
+network_tot_quest_reduced <- estimateNetwork(df_network_analysis_tot_quest_reduced, default = "EBICglasso")
+
+# 3. Visualize Network
+plot(network_tot_quest_reduced, layout = "spring", vsize = 8, label.cex = 1.5, posCol = "darkgreen", negCol = "red3", title = "Network analysis for total questionnaires (reduced dataset)")
+
+```
+
+```{r}
+# 4. Calculate Centrality
+#centrality(network_tot_quest_full)
+centralityPlot(network_tot_quest_reduced)
+
+```
+
+
+```{r}
+# 5. Bootstrap Accuracy
+boot_results_tot_quest_reduced <- bootnet(network_tot_quest_reduced, nBoots = 1000)
+plot(boot_results_tot_quest_reduced, labels = TRUE)
+```
+
+#### Subscales
+```{r}
+# 1. Load and Prepare Data
+df_network_analysis_reduced_subscales <- df_reduced_for_exporting %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_hyper_impulse, ASRS_inattentive,
+                MSSB_positive, MSSB_negative, MSSB_disorganised,
+                AQ_total_score,
+                OCI_R_hoard, OCI_R_wash, 
+                OCI_R_obsess, OCI_R_order, OCI_R_check, OCI_R_neutral,
+                BDI_shorten_total_score,
+                HCL32_act, HCL32_irrit,
+                EAT_diet, EAT_bul_foodpreoc, EAT_oral_ctrl) %>%
+ mutate(across(everything(), scale))
+```
+
+
+```{r}
+# 2. Estimate Network
+network_reduced_subscales <- estimateNetwork(df_network_analysis_reduced_subscales, default = "EBICglasso")
+
+plot(network_reduced_subscales, layout = "spring", vsize = 8, label.cex = 1.5, posCol = "darkgreen", negCol = "red3", title = "Network analysis for subscales (reduced dataset)")
+
+
+```
+
+```{r}
+# 4. Calculate Centrality
+centralityPlot(network_reduced_subscales)
+```
+
+```{r}
+# 5. Bootstrap Accuracy
+boot_results_subscales_reduced <- bootnet(network_reduced_subscales, nBoots = 1000)
+boot_plot_reduced <- plot(boot_results_subscales_reduced, labels = TRUE, interactive = TRUE)
+
+plotly::ggplotly(boot_plot_reduced, height = 2000)
+```
+
+
 
