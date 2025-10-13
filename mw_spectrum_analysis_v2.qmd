@@ -1,0 +1,1069 @@
+---
+title: "MW spectrum analysis v2"
+author: "Miha Likar"
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    number-sections: true
+    toc-expand: true
+editor: visual
+---
+
+Import required libraries:
+
+```{r, message = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(sjPlot)
+library(performance)
+library(ggeffects)
+library(broom.mixed)
+library(patchwork)
+library(corrplot)
+library(ggcorrplot)
+library(janitor)
+library(psych)
+library(naniar)
+library(corrr)
+library(Hmisc)
+library(fedmatch)
+library(MASS)
+library(sandwich)
+library(lmtest)
+library(kableExtra)
+```
+
+
+# Overview
+
+This is the second version of the analysis for MW~spectrum associations. The main difference from the first verison is that here STAI-state scores were not included in the analyses based on the meeting and discussion we had with Peti and Bianka (Trait scores would be more appropriate as MW is also measured on trait level, however STAI-trait scores were missing for a lot of participants).
+
+
+**Data preprocessing:**
+
+- 709 observations in complete, initial dataset 
+- 237 participants/obervations were removed as they lack MWQ responses. 
+- 21 participants/observations removed as majority of questionnaires is missing (impossible to impute missing values).
+- 73 participants removed due to medication/diagnoses (reduced dataset).
+- 1 additional participant removed due to missing BDI score (removed both datasets).
+
+**Final dataset sizes:**
+
+- Full = 450 observations
+- Reduced = 377 observations
+
+**The following was done as part of this analysis:**
+
+- Bivariate correlation analysis presented in correlation matrices
+- Regression analysis of all total questionnaire scores^ predicting MWQ
+- Regression analysis of ASRS subscales predicting MWQ
+- Network analysis with total questionnaire scores
+- Network analysis with subscales
+
+*All analyses were done on full and redueced datasets.*
+
+^ included questionnaires: ASRS, OCI-R, AQ, MSS-B, BDI (shortened), EAT, HCL-32
+
+
+**IMPORTANT NOTE:** after checking EAT subscale calculations, there are deviations from Bianka's and my calculation in some cases. We are looking into it and will solve the "problem" ASAP.
+
+
+# Data importing and finalisation
+
+Import both datasets and remove STAI-state score as I still included it in the exported, finalised datasets.
+
+Full dataset:
+```{r}
+df_full_analysis <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/R_project/MW_spectrum_analysis/Data/mw_spectrum_full_df_final.csv")
+
+df_full_analysis <- df_full_analysis %>%
+  dplyr::select(-STAI_state_sum)
+```
+
+
+Reduced dataset (no medicated/diagnosed participants):
+```{r}
+df_reduced_analysis <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/R_project/MW_spectrum_analysis/Data/mw_spectrum_reduced_df_final.csv")
+
+df_reduced_analysis <- df_reduced_analysis %>%
+  dplyr::select(-STAI_state_sum)
+```
+
+Create a name dictionary to use for clean naming in plots and tables:
+```{r}
+name_dict <- c(
+  mwq_total_score = "MWQ (mind-wandering)",
+  ASRS_total_score = "ASRS (ADHD)", 
+  MSSB_total = "MSS-B (schizotypy)",
+  AQ_total_score = "AQ (autism spectrum)",
+  OCI_R_total_score = "OCI-R (OCD)",
+  BDI_shorten_total_score = "BDI short (depression)",
+  HCL32_total_score = "HCL-32 (hypomania)",
+  EAT_total_score = "EAT (eating disorder)",
+  ASRS_hyper_impulse = "ASRS - hyperactive, impulsive",
+  ASRS_inattentive = "ASRS - inattentive",
+  MSSB_positive = "MSS-B - positive",
+  MSSB_negative = "MSS-B - negative",
+  MSSB_disorganised = "MSS-B - disorganised",
+  OCI_R_hoard = "OCI-R - hoarding",
+  OCI_R_wash = "OCI-R - washing",
+  OCI_R_obsess = "OCI-R - obsessing",
+  OCI_R_order = "OCI-R - ordering",
+  OCI_R_check = "OCI-R - checking", 
+  OCI_R_neutral = "OCI-R - neutralizing",
+  HCL32_act = "HCL-32 - active/elated",
+  HCL32_irrit = "HCL-32 - risk-taking/irritable",
+  EAT_diet = "EAT - dieting",
+  EAT_bul_foodpreoc = "EAT - bulimia, food preoc.",
+  EAT_oral_ctrl = "EAT - oral control"
+)
+```
+
+
+# Data analysis
+
+## Visualizing total questionnaire score distribution
+
+Full dataset:
+
+```{r}
+full_df_questionnaire_distribution_plot <- df_full_analysis %>%
+  dplyr::select(mwq_total_score,
+                ASRS_total_score,  
+                MSSB_total,
+                AQ_total_score, 
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  pivot_longer(cols = everything(),
+               names_to = "Questionnaire",
+               values_to = "Score") %>%
+  mutate(Questionnaire = recode(Questionnaire, !!!name_dict)) %>%
+  ggplot(aes(x = "", y = Score, fill = Questionnaire)) +  
+  geom_boxplot(outlier.shape = 21, alpha = 0.8) +
+  facet_wrap(~ Questionnaire, scales = "free_y", ncol = 4) +  
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),  
+    strip.text = element_text(face = "bold", size = 10)
+  ) +
+  labs(
+    title = "Questionnaire Scores (full dataset)",
+    x = NULL,  
+    y = "Score"
+  )
+```
+
+Reduced dataset:
+```{r}
+reduced_df_questionnaire_distribution_plot <- df_reduced_analysis %>%
+  dplyr::select(mwq_total_score,
+                ASRS_total_score,  
+                MSSB_total,
+                AQ_total_score, 
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  pivot_longer(cols = everything(),
+               names_to = "Questionnaire",
+               values_to = "Score") %>%
+  mutate(Questionnaire = recode(Questionnaire, !!!name_dict)) %>%
+  ggplot(aes(x = "", y = Score, fill = Questionnaire)) +  
+  geom_boxplot(outlier.shape = 21, alpha = 0.8) +
+  facet_wrap(~ Questionnaire, scales = "free_y", ncol = 4) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),  
+    strip.text = element_text(face = "bold", size = 10)
+  ) +
+  labs(
+    title = "Questionnaire Scores (reduced dataset)",
+    x = NULL,  
+    y = "Score"
+  )
+```
+
+
+Show plots:
+```{r, fig.height=8, fig.width=12}
+full_df_questionnaire_distribution_plot
+reduced_df_questionnaire_distribution_plot
+```
+
+## Bivariate correlations
+
+### Full dataset
+
+Run a Spearman correlation test to use for matrix (Bonferroni correction for multiple tests):
+```{r}
+corr_matrix_full_data <- df_full_analysis %>%
+  dplyr::select(mwq_total_score,
+                ASRS_total_score,  
+                MSSB_total,
+                AQ_total_score, 
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  mutate(across(everything(), ~ as.numeric(scale(.)))) %>%
+  corr.test(method = "spearman", adjust = "bonferroni")
+```
+
+Plotting the matrix:
+```{r, fig.height=8, fig.width=8}
+corr_matrix_full_data_ggplot <- ggcorrplot(corr_matrix_full_data$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_full_data$p,
+           sig.level = 0.05, 
+           insig = "blank",
+           lab_col = "black",
+           colors = c("#D64541", "white", "#1E8449")) + 
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Bivariate correlations of questionnaires", subtitle = "Below the diagonal, insignificant associations with unadjusted p-values were removed. \nAbove the diagonal, insignificant associations with adjusted p-values were removed.", caption = "Bonferroni correction used for p-value adjustment.") + 
+    scale_x_discrete(labels = name_dict) +  
+    scale_y_discrete(labels = name_dict) +  
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+```
+
+Create bivariate correlation table:
+```{r}
+total_n_full_df <- corr_matrix_full_data$n
+total_df_full_df <- total_n_full_df - 2
+
+corr_tidy_full_df <- as.data.frame(corr_matrix_full_data$r) %>%
+  rownames_to_column("var1") %>%
+  pivot_longer(-var1, names_to = "var2", values_to = "r") %>%
+  left_join(
+    as.data.frame(corr_matrix_full_data$p) %>%
+      rownames_to_column("var1") %>%
+      pivot_longer(-var1, names_to = "var2", values_to = "p"),
+    by = c("var1", "var2")
+  ) %>%
+  mutate(n = total_n_full_df,           # Use the single n value
+         df = total_df_full_df) %>%     # Use the single df value
+  filter(var1 != var2)          # Remove self-correlations
+```
+
+
+### Reduced data analysis (no diagnosed/medicated participants)
+
+Run a Spearman correlation test to use for matrix (Bonferroni correction for multiple tests):
+```{r}
+corr_matrix_reduced_data <- df_reduced_analysis %>%
+  dplyr::select(mwq_total_score,
+                ASRS_total_score,  
+                MSSB_total,
+                AQ_total_score, 
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  mutate(across(everything(), ~ as.numeric(scale(.)))) %>%
+  corr.test(method = "spearman", adjust = "bonferroni")
+```
+
+Plotting the matrix:
+```{r, fig.height=8, fig.width=8}
+corr_matrix_reduced_data_ggplot <- ggcorrplot(corr_matrix_reduced_data$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_reduced_data$p,
+           sig.level = 0.05, 
+           insig = "blank",
+           lab_col = "black",
+           colors = c("#D64541", "white", "#1E8449")) + 
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Bivariate correlations of questionnaires (reduced dataset)", subtitle = "Below the diagonal, insignificant associations with unadjusted p-values were removed. \nAbove the diagonal, insignificant associations with adjusted p-values were removed.", caption = "Bonferroni correction used for p-value adjustment.") + 
+    scale_x_discrete(labels = name_dict) +  
+    scale_y_discrete(labels = name_dict) +  
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+```
+
+Create bivariate correlation table:
+```{r}
+total_n_reduced_df <- corr_matrix_reduced_data$n
+total_df_reduced_df <- total_n_reduced_df - 2
+
+corr_tidy_reduced_df <- as.data.frame(corr_matrix_reduced_data$r) %>%
+  rownames_to_column("var1") %>%
+  pivot_longer(-var1, names_to = "var2", values_to = "r") %>%
+  left_join(
+    as.data.frame(corr_matrix_reduced_data$p) %>%
+      rownames_to_column("var1") %>%
+      pivot_longer(-var1, names_to = "var2", values_to = "p"),
+    by = c("var1", "var2")
+  ) %>%
+  mutate(n = total_n_reduced_df,           # Use the single n value
+         df = total_df_reduced_df) %>%     # Use the single df value
+  filter(var1 != var2)          # Remove self-correlations
+```
+
+
+### Showing plots
+Show both plots:
+```{r, fig.height=8, fig.width=8, warning = FALSE}
+corr_matrix_full_data_ggplot
+corr_matrix_reduced_data_ggplot
+```
+
+## Regression analyses
+
+As mentioned before, compared to the first version of the analysis, STAI-state is not included in this analyses.
+
+### Full dataset
+
+**Standardizing all variables for regression analysis:**
+```{r}
+df_full_analysis_scaled <- df_full_analysis %>%
+  mutate(across(everything(), ~ as.numeric(scale(.))))
+```
+
+#### Fitting regression model
+
+Fitting multiple regression for full dataset:
+```{r}
+regression_model_full_data <- lm(mwq_total_score ~ ASRS_total_score + MSSB_total + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score, 
+                                data = df_full_analysis_scaled)
+```
+
+
+Print summary of the model. **Note that p-values here are unadjusted. Since the literature and specialised forum discussions vary on this topic, I am not sure whether correction like FDR should be applied or not.**
+```{r}
+summary(regression_model_full_data)
+```
+
+
+#### Model diagnostics (checking the assumptions)
+
+Check for outliers:
+```{r}
+check_outliers(regression_model_full_data)
+check_outliers(regression_model_full_data) |> plot()
+```
+
+Check for heteroscedasticity:
+```{r}
+check_heteroscedasticity(regression_model_full_data)
+check_heteroscedasticity(regression_model_full_data) |> plot()
+```
+Use alternative inspection to see which point is it:
+```{r}
+plot(regression_model_full_data, which = 1)
+```
+Search for observation 130:
+```{r}
+augment(regression_model_full_data) %>% 
+  mutate(row_n = seq((1:nrow(df_full_analysis_scaled)))) %>% 
+  relocate(row_n, 1) %>%
+  filter(row_n == 130)
+```
+
+**While visual inspection suggests that specifically one point affects homoscedasticity, the formal test suggest no issues.** After diagnosing the observations, I see that: **Observation 130** = 3.73 SD over mean ASRS score. As formal tests suggests no issues and only this point seems to be affecting homoscedasticity, considering our sample size, I believe there is no need for removal of this observation. 
+
+Check for normality of residuals:
+```{r}
+check_normality(regression_model_full_data)
+plot(regression_model_full_data, which = 2)
+```
+**Non-normality of residuals detected** - while formal test suggest non-normality of residuals, visual inspections suggests that deviation is only at the tails, so I believe it is reasonable to keep this model. 
+
+Check multicolinearity:
+```{r}
+check_collinearity(regression_model_full_data)
+```
+
+No issues with multicolinearity!
+
+#### Plotting model estimates
+
+Visualising model estimates, **no correction applied**.
+```{r}
+regression_full_data_estimate_plot <- plot_model(regression_model_full_data, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates")
+
+regression_full_data_estimate_plot
+```
+
+
+#### Table of results
+
+No p-value adjustment! Table with adjusted p-values in the later section.
+```{r}
+tab_model(regression_model_full_data,
+          show.stat = TRUE,
+          show.df = TRUE,
+          string.est = "β",
+          string.stat = "t",
+          dv.labels = "MWQ (mind-wandering)",
+          digits = 3,
+          pred.labels = name_dict,
+          CSS = list(css.table = 'font-size: 10pt; width: 100%;'))
+```
+
+### Reduced data
+
+**Standardizing all variables for regression analysis:**
+```{r}
+df_reduced_analysis_scaled <- df_reduced_analysis %>%
+  mutate(across(everything(), ~ as.numeric(scale(.))))
+```
+
+#### Fitting regression model
+
+Fitting multiple regression for full dataset:
+```{r}
+regression_model_reduced_data <- lm(mwq_total_score ~ ASRS_total_score + MSSB_total + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score, data = df_reduced_analysis_scaled)
+```
+
+
+Print summary of the model. **Note that p-values here are unadjusted. Since the literature and specialised forum discussions vary on this topic, I am not sure whether correction like FDR should be applied or not.**
+```{r}
+summary(regression_model_reduced_data)
+```
+
+**NOTE: compared to full dataset, regression coefficients of model on reduced dataset suggest that only ASRS is a significant predictor for participants with no diagnoses/medication. The most significant difference appears in MSS-B estimates: -0.112 in full dataset and -0.005 in reduced dataset.**
+
+#### Model diagnostics (checking the assumptions)
+
+Check for outliers:
+```{r}
+check_outliers(regression_model_reduced_data)
+check_outliers(regression_model_reduced_data) |> plot()
+```
+
+Check for heteroscedasticity:
+```{r}
+check_heteroscedasticity(regression_model_reduced_data)
+check_heteroscedasticity(regression_model_reduced_data) |> plot()
+```
+
+
+Check for normality of residuals:
+```{r}
+check_normality(regression_model_reduced_data)
+plot(regression_model_reduced_data, which = 2)
+```
+
+Residuals appear normally distributed.
+
+Check multicolinearity:
+```{r}
+check_collinearity(regression_model_reduced_data)
+```
+
+No issues with multicolinearity!
+
+#### Plotting model estimates
+
+Visualising model estimates, **no correction applied**.
+```{r}
+regression_reduced_data_estimate_plot <- plot_model(regression_model_reduced_data, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates (reduced dataset)")
+
+regression_reduced_data_estimate_plot
+```
+
+
+#### Table of results
+
+No p-value adjusment! Adjusted values for both models below.
+```{r}
+tab_model(regression_model_reduced_data,
+          show.stat = TRUE,
+          show.df = TRUE,
+          string.est = "β",
+          string.stat = "t",
+          dv.labels = "MWQ (mind-wandering)",
+          digits = 3,
+          pred.labels = name_dict,
+          CSS = list(css.table = 'font-size: 10pt; width: 100%;'))
+```
+
+
+
+### Table with estimates for both full and reduced dataset
+
+No correction:
+```{r}
+tab_model(regression_model_full_data,
+          regression_model_reduced_data,
+          show.stat = TRUE,
+          show.df = TRUE,
+          string.est = "β",
+          string.stat = "t",
+          dv.labels = c("MWQ (mind-wandering) in full dataset",
+                        "MWQ (mind-wandering) in reduced dataset"),
+          digits = 3,
+          show.fstat = TRUE,
+          pred.labels = name_dict,
+          CSS = list(css.table = 'font-size: 10pt; width: 100%;'))
+```
+
+FDR correction:
+```{r}
+tab_model(regression_model_full_data,
+          regression_model_reduced_data,
+          show.stat = TRUE,
+          show.df = TRUE,
+          string.est = "β",
+          string.stat = "t",
+          dv.labels = c("MWQ (mind-wandering) in full dataset",
+                        "MWQ (mind-wandering) in reduced dataset"),
+          digits = 3,
+          show.fstat = TRUE,
+          p.adjust = "fdr",
+          pred.labels = name_dict,
+          CSS = list(css.table = 'font-size: 10pt; width: 100%;'))
+```
+
+
+## ASRS subscale regression analysis
+
+ASRS subscale regression analysis is warranted for the following reasons:
+
+- The only significant predictor after potential FDR correction in both datasets
+- The only <.001 predictor with no correction in full dataset
+- The only significant predictor in reduced dataset
+
+### Full dataset
+
+Fitting regression model:
+```{r}
+asrs_subscale_regression_model_full_data <- lm(mwq_total_score ~ ASRS_hyper_impulse + ASRS_inattentive,  data = df_full_analysis_scaled)
+```
+
+Summary of the model:
+```{r}
+summary(asrs_subscale_regression_model_full_data)
+```
+
+
+```{r, fig.width = 8, fig.height=12}
+check_model(asrs_subscale_regression_model_full_data)
+```
+
+### Reduced dataset
+
+Fitting regression model:
+```{r}
+asrs_subscale_regression_model_reduced_data <- lm(mwq_total_score ~ ASRS_hyper_impulse + ASRS_inattentive, data = df_reduced_analysis_scaled)
+```
+
+Summary of the model:
+```{r}
+summary(asrs_subscale_regression_model_reduced_data)
+```
+
+
+```{r, fig.width = 8, fig.height=12}
+check_model(asrs_subscale_regression_model_reduced_data)
+```
+
+### Summary of ASRS regression
+
+**In both datasets ASRS regression suggests that both subscales are significant predictors, specifically "Inattentiveness" subscale. **
+
+```{r}
+tab_model(asrs_subscale_regression_model_full_data,
+          asrs_subscale_regression_model_reduced_data,
+          show.stat = TRUE,
+          show.df = TRUE,
+          string.est = "β",
+          string.stat = "t",
+          dv.labels = c("MWQ by ASRS subscales in full dataset",
+                        "MWQ by ASRS subscales in reduced dataset"),
+          digits = 3,
+          show.fstat = TRUE,
+          pred.labels = name_dict,
+          CSS = list(css.table = 'font-size: 10pt; width: 100%;'))
+```
+
+## Comparing performances of full models and models with ASRS subscales only
+
+### Full dataset
+ANOVA:
+```{r}
+anova(regression_model_full_data, asrs_subscale_regression_model_full_data)
+```
+
+Other metrics:
+```{r}
+compare_performance(regression_model_full_data, asrs_subscale_regression_model_full_data)
+```
+
+
+### Reduced dataset
+ANOVA:
+```{r}
+anova(regression_model_reduced_data, asrs_subscale_regression_model_reduced_data)
+```
+
+Other metrics:
+```{r}
+compare_performance(regression_model_reduced_data, asrs_subscale_regression_model_reduced_data)
+```
+
+
+## Network analysis
+
+### Full data
+
+```{r}
+# Load Libraries
+library(qgraph)
+library(bootnet)
+```
+
+#### Total scores
+```{r}
+df_net_analysis_tot_quest_full <- df_full_analysis_scaled %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_total_score,
+                MSSB_total,
+                AQ_total_score,
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  rename(
+    "MWQ" = mwq_total_score,
+    "ASRS" = ASRS_total_score,
+    "MSS-B" = MSSB_total,
+    "AQ" = AQ_total_score,
+    "OCI-R" = OCI_R_total_score,
+    "BDI" = BDI_shorten_total_score,
+    "HCL-32" = HCL32_total_score,
+    "EAT" = EAT_total_score
+  )
+```
+
+```{r}
+# 2. Estimate Network
+net_analysis_tot_quest_full <- estimateNetwork(df_net_analysis_tot_quest_full, default = "EBICglasso")
+```
+```{r}
+# Calculate centrality
+cent_tot_quest_full <- centrality(net_analysis_tot_quest_full)$OutDegree
+
+# Scale centrality to reasonable node sizes (e.g., 4-10)
+node_sizes_tot_quest_full <- scales::rescale(cent_tot_quest_full, to = c(5, 10))
+
+plot(net_analysis_tot_quest_full, 
+     layout = "spring", 
+     vsize = node_sizes_tot_quest_full,  # Manual sizing based on centrality
+     label.cex = 1.2, 
+     posCol = "darkgreen", 
+     negCol = "red3", 
+     title = "Network analysis for total questionnaires (full dataset)")
+```
+Centrality plot:
+```{r}
+centralityPlot(net_analysis_tot_quest_full, orderBy = "Strength")
+```
+
+```{r, eval = FALSE}
+# 5. Bootstrap Accuracy
+boot_results_tot_quest_full <- bootnet(net_analysis_tot_quest_full, nBoots = 1000)
+plot(boot_results_tot_quest_full, labels = TRUE)
+```
+
+
+#### Subscales
+```{r}
+# 1. Load and Prepare Data
+df_net_analysis_full_subscales <- df_full_analysis_scaled %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_hyper_impulse, ASRS_inattentive,
+                MSSB_positive, MSSB_negative, MSSB_disorganised,
+                AQ_total_score,
+                OCI_R_hoard, OCI_R_wash, 
+                OCI_R_obsess, OCI_R_order, OCI_R_check, OCI_R_neutral,
+                BDI_shorten_total_score,
+                HCL32_act, HCL32_irrit,
+                EAT_diet, EAT_bul_foodpreoc, EAT_oral_ctrl) %>%
+  rename(
+    "MWQ\n(mind-wandering)" = mwq_total_score,
+    "ASRS\nHyperactive" = ASRS_hyper_impulse,
+    "ASRS\nInattentive" = ASRS_inattentive,
+    "MSS-B\nPositive" = MSSB_positive,
+    "MSS-B\nNegative" = MSSB_negative,
+    "MSS-B\nDisorganized" = MSSB_disorganised,
+    "AQ\n(autism)" = AQ_total_score,
+    "OCI-R\nHoarding" = OCI_R_hoard,
+    "OCI-R\nWashing" = OCI_R_wash,
+    "OCI-R\nObsessions" = OCI_R_obsess,
+    "OCI-R\nOrdering" = OCI_R_order,
+    "OCI-R\nChecking" = OCI_R_check,
+    "OCI-R\nNeutralizing" = OCI_R_neutral,
+    "BDI\n(depression)" = BDI_shorten_total_score,
+    "HCL-32\nActive/Elated" = HCL32_act,
+    "HCL-32\nRisk/Irritable" = HCL32_irrit,
+    "EAT\nDieting" = EAT_diet,
+    "EAT\nBulimia" = EAT_bul_foodpreoc,
+    "EAT\nOral Control" = EAT_oral_ctrl
+  )
+```
+
+
+```{r}
+# 2. Estimate Network
+net_analysis_subscales_full <- estimateNetwork(df_net_analysis_full_subscales, default = "EBICglasso")
+```
+
+```{r, fig.width = 12, fig.height = 10}
+# Calculate centrality
+cent_subscales_full <- centrality(net_analysis_subscales_full)$OutDegree
+
+# Scale centrality to reasonable node sizes
+node_sizes_subscales_full <- scales::rescale(cent_subscales_full, to = c(6, 10))
+
+label_sizes_subscales_full <- scales::rescale(node_sizes_subscales_full, to = c(0.7, 1.0))
+
+plot(net_analysis_subscales_full, 
+     layout = "spring", 
+     vsize = node_sizes_subscales_full,
+     label.cex = label_sizes_subscales_full,  # Proportional to node size
+     posCol = "darkgreen", 
+     negCol = "red3", 
+     title = "Network analysis for subscales (full dataset)")
+
+```
+
+
+```{r, fig.width = 10, fig.height = 6}
+# 4. Calculate Centrality
+centralityPlot(net_analysis_subscales_full, orderBy = "Strength")
+```
+
+```{r, eval = FALSE}
+# 5. Bootstrap Accuracy
+boot_results_subscales_full <- bootnet(net_analysis_subscales_full, nBoots = 1000)
+boot_plot <- plot(boot_results_subscales_full, labels = TRUE, interactive = TRUE)
+
+plotly::ggplotly(boot_plot, height = 2000)
+```
+
+
+### Reduced data
+
+#### Total scores
+```{r}
+df_net_analysis_tot_quest_reduced <- df_reduced_analysis_scaled %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_total_score,
+                MSSB_total,
+                AQ_total_score,
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  rename(
+    "MWQ" = mwq_total_score,
+    "ASRS" = ASRS_total_score,
+    "MSS-B" = MSSB_total,
+    "AQ" = AQ_total_score,
+    "OCI-R" = OCI_R_total_score,
+    "BDI" = BDI_shorten_total_score,
+    "HCL-32" = HCL32_total_score,
+    "EAT" = EAT_total_score
+  )
+```
+
+```{r}
+# 2. Estimate Network
+net_analysis_tot_quest_reduced <- estimateNetwork(df_net_analysis_tot_quest_reduced, default = "EBICglasso")
+```
+```{r}
+# Calculate centrality
+cent_tot_quest_reduced <- centrality(net_analysis_tot_quest_full)$OutDegree
+
+# Scale centrality to reasonable node sizes (e.g., 4-10)
+node_sizes_tot_quest_reduced <- scales::rescale(cent_tot_quest_reduced, to = c(5, 10))
+
+plot(net_analysis_tot_quest_reduced, 
+     layout = "spring", 
+     vsize = node_sizes_tot_quest_reduced,  # Manual sizing based on centrality
+     label.cex = 1.2, 
+     posCol = "darkgreen", 
+     negCol = "red3", 
+     title = "Network analysis for total questionnaires (reduced dataset)")
+```
+Centrality plot:
+```{r}
+centralityPlot(net_analysis_tot_quest_reduced, orderBy = "Strength")
+```
+
+```{r, eval = FALSE}
+# 5. Bootstrap Accuracy
+boot_results_tot_quest_reduced <- bootnet(net_analysis_tot_quest_reducedl, nBoots = 1000)
+plot(boot_results_tot_quest_reduced, labels = TRUE)
+```
+
+
+#### Subscales
+```{r}
+# 1. Load and Prepare Data
+df_net_analysis_reduced_subscales <- df_reduced_analysis_scaled %>%
+  dplyr::select(mwq_total_score, 
+                ASRS_hyper_impulse, ASRS_inattentive,
+                MSSB_positive, MSSB_negative, MSSB_disorganised,
+                AQ_total_score,
+                OCI_R_hoard, OCI_R_wash, 
+                OCI_R_obsess, OCI_R_order, OCI_R_check, OCI_R_neutral,
+                BDI_shorten_total_score,
+                HCL32_act, HCL32_irrit,
+                EAT_diet, EAT_bul_foodpreoc, EAT_oral_ctrl) %>%
+  rename(
+    "MWQ\n(mind-wandering)" = mwq_total_score,
+    "ASRS\nHyperactive" = ASRS_hyper_impulse,
+    "ASRS\nInattentive" = ASRS_inattentive,
+    "MSS-B\nPositive" = MSSB_positive,
+    "MSS-B\nNegative" = MSSB_negative,
+    "MSS-B\nDisorganized" = MSSB_disorganised,
+    "AQ\n(autism)" = AQ_total_score,
+    "OCI-R\nHoarding" = OCI_R_hoard,
+    "OCI-R\nWashing" = OCI_R_wash,
+    "OCI-R\nObsessions" = OCI_R_obsess,
+    "OCI-R\nOrdering" = OCI_R_order,
+    "OCI-R\nChecking" = OCI_R_check,
+    "OCI-R\nNeutralizing" = OCI_R_neutral,
+    "BDI\n(depression)" = BDI_shorten_total_score,
+    "HCL-32\nActive/Elated" = HCL32_act,
+    "HCL-32\nRisk/Irritable" = HCL32_irrit,
+    "EAT\nDieting" = EAT_diet,
+    "EAT\nBulimia" = EAT_bul_foodpreoc,
+    "EAT\nOral Control" = EAT_oral_ctrl
+  )
+```
+
+
+```{r}
+# 2. Estimate Network
+net_analysis_subscales_reduced <- estimateNetwork(df_net_analysis_reduced_subscales, default = "EBICglasso")
+```
+
+```{r, fig.width = 12, fig.height = 10}
+# Calculate centrality
+cent_subscales_reduced <- centrality(net_analysis_subscales_reduced)$OutDegree
+
+# Scale centrality to reasonable node sizes
+node_sizes_subscales_reduced <- scales::rescale(cent_subscales_reduced, to = c(6, 10))
+
+label_sizes_subscales_reduced <- scales::rescale(node_sizes_subscales_reduced, to = c(0.7, 1.0))
+
+plot(net_analysis_subscales_reduced, 
+     layout = "spring", 
+     vsize = node_sizes_subscales_reduced,
+     label.cex = label_sizes_subscales_reduced,  # Proportional to node size
+     posCol = "darkgreen", 
+     negCol = "red3", 
+     title = "Network analysis for subscales (reduced dataset)")
+
+```
+
+
+```{r, fig.width = 10, fig.height = 6}
+# 4. Calculate Centrality
+centralityPlot(net_analysis_subscales_reduced, orderBy = "Strength")
+```
+
+```{r, eval = FALSE}
+# 5. Bootstrap Accuracy
+boot_results_subscales_reduced <- bootnet(net_analysis_subscales_reduced, nBoots = 1000)
+boot_plot <- plot(boot_results_subscales_reduced, labels = TRUE, interactive = TRUE)
+
+plotly::ggplotly(boot_plot, height = 2000)
+```
+
+
+# Condensed report
+
+## Variable distribution plots
+
+```{r, fig.height=8, fig.width=12}
+full_df_questionnaire_distribution_plot
+reduced_df_questionnaire_distribution_plot
+```
+
+## Bivariate correlation matrices
+
+
+```{r, fig.height=8, fig.width=8, warning = FALSE}
+corr_matrix_full_data_ggplot
+corr_matrix_reduced_data_ggplot
+```
+
+## Regression analyses
+
+Estimate plots without p-value adjustment/correction:
+
+```{r}
+regression_full_data_estimate_plot
+regression_reduced_data_estimate_plot
+```
+
+**No correction:**
+```{r}
+tab_model(regression_model_full_data,
+          regression_model_reduced_data,
+          show.stat = TRUE,
+          show.df = TRUE,
+          string.est = "β",
+          string.stat = "t",
+          dv.labels = c("MWQ (mind-wandering) in full dataset",
+                        "MWQ (mind-wandering) in reduced dataset"),
+          digits = 3,
+          show.fstat = TRUE,
+          pred.labels = name_dict,
+          CSS = list(css.table = 'font-size: 10pt; width: 100%;'))
+```
+
+**FDR correction:**
+```{r}
+tab_model(regression_model_full_data,
+          regression_model_reduced_data,
+          show.stat = TRUE,
+          show.df = TRUE,
+          string.est = "β",
+          string.stat = "t",
+          dv.labels = c("MWQ (mind-wandering) in full dataset",
+                        "MWQ (mind-wandering) in reduced dataset"),
+          digits = 3,
+          show.fstat = TRUE,
+          p.adjust = "fdr",
+          pred.labels = name_dict,
+          CSS = list(css.table = 'font-size: 10pt; width: 100%;'))
+```
+
+
+### ASRS subscales regression models
+
+**In both datasets ASRS regression suggests that both subscales are significant predictors, specifically "Inattentiveness" subscale.**
+
+```{r}
+tab_model(asrs_subscale_regression_model_full_data,
+          asrs_subscale_regression_model_reduced_data,
+          show.stat = TRUE,
+          show.df = TRUE,
+          string.est = "β",
+          string.stat = "t",
+          dv.labels = c("MWQ by ASRS subscales in full dataset",
+                        "MWQ by ASRS subscales in reduced dataset"),
+          digits = 3,
+          show.fstat = TRUE,
+          pred.labels = name_dict,
+          CSS = list(css.table = 'font-size: 10pt; width: 100%;'))
+```
+
+#### Comparing performances of full models and models with ASRS subscales only
+
+Full dataset:
+
+ANOVA:
+```{r}
+anova(regression_model_full_data, asrs_subscale_regression_model_full_data)
+```
+
+Other metrics:
+```{r}
+compare_performance(regression_model_full_data, asrs_subscale_regression_model_full_data)
+```
+
+
+Reduced dataset:
+
+ANOVA:
+```{r}
+anova(regression_model_reduced_data, asrs_subscale_regression_model_reduced_data)
+```
+
+Other metrics:
+```{r}
+compare_performance(regression_model_reduced_data, asrs_subscale_regression_model_reduced_data)
+```
+
+
+**In both datasets, comparison of the models suggest no "added value" of predictors beyond ASRS subscales. Metrics like AIC, BIC and adjusted R-squared express this specifically, as more complex models are penalized for higher number of predictors.**
+
+## Network analysis
+
+**Only subscale network analyses are reported here. Total questionnaire scores networks and centrality analyses are reported above in the "Network analysis" section.**
+
+### Full data
+
+**Note:** node sizes indicate centrality
+
+```{r, fig.width = 12, fig.height = 10}
+plot(net_analysis_subscales_full, 
+     layout = "spring", 
+     vsize = node_sizes_subscales_full,
+     label.cex = label_sizes_subscales_full,  # Proportional to node size
+     posCol = "darkgreen", 
+     negCol = "red3", 
+     title = "Network analysis for subscales (full dataset)")
+```
+
+### Reduced data
+
+**Note:** node sizes indicate centrality
+
+```{r, fig.width = 12, fig.height = 10}
+plot(net_analysis_subscales_reduced, 
+     layout = "spring", 
+     vsize = node_sizes_subscales_reduced,
+     label.cex = label_sizes_subscales_reduced,  # Proportional to node size
+     posCol = "darkgreen", 
+     negCol = "red3", 
+     title = "Network analysis for subscales (reduced dataset)")
+```
+
+**Mind wandering seems to be mostly associated with:**
+
+- ASRS inattentiveness
+- ASRS hyperactivity
+- OCI-R obsession
+
+
+## Final remarks
+
+**Based on the presented results, I have a few questions about "final thoughts" on this analyses and how we should proceed to the manuscript:**
+
+1. Should we present analyses on **full** or **reduced** (no diagnosed/medicated participants)?
+2. Which results should be presented - all (bivariate correlations, regressions, network analysis)? Especially since we are aiming for a short report.
+3. In case of regressions with multiple predictors, should we go with no corrections or FDR?
+4. Should we do any other analysis? In the original/first version of the masnucript, Bayesian regression was performed as well. 
+
