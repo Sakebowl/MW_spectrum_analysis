@@ -1234,7 +1234,7 @@ tab_model(reg_model,
 Plot model estimates:
 
 ```{r}
-plot_model(reg_model_exc, type = "est", p.adjust = "bonferroni", show.value = TRUE, value.offset = 0.35) + 
+plot_model(reg_model_exc, type = "est", show.value = TRUE, value.offset = 0.35) + 
   theme_minimal() + 
   labs(title = "MWQ predicted be questionnaires (reduced dataset)") +
   scale_x_discrete(labels = c("STAI", "HCL32", "EAT", "BDI short", "ASRS", "AQ", "OCI-R", "MSSB"))
@@ -1738,6 +1738,11 @@ df_merged_clean_subscales %>%
 
 **IMPROTANT**: values in EAT_ subscales are not matching in all cases, need to check with Bianka how she calculated the scores. I followed this resource: https://www.eat-26.com/wp-content/uploads/2021/02/EAT-26IntpretScoring-Test-11-1-17.pdf. 
 
+```{r}
+df_merged_clean_subscales %>%
+  dplyr::select(starts_with("EAT_"))
+```
+
 
 At this step, let's finalise the dataset for the analysis. We will do:
 
@@ -1956,7 +1961,7 @@ df_network_analysis_full_subscales <- df_full_for_exporting %>%
 ```
 
 
-```{r}
+```{r, fig.width = 14, fig.height=14}
 # 2. Estimate Network
 network_full_subscales <- estimateNetwork(df_network_analysis_full_subscales, default = "EBICglasso")
 
