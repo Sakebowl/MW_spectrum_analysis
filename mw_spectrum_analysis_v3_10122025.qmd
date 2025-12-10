@@ -480,7 +480,44 @@ pcor.test(
 Now the partial correlation is significantly negative, with t-value resembling the one from the regression model.
 
 
-### Bayesian regression
+## Subscale regression model
+
+Let's explore the regression model, where instead of full questionnaire scores, we use specific subscales, where they are available and full scores when not.
+```{r}
+regmodel_subscales_full_df_dec10 <- lm(MWQ_total_score ~ AQ_total_score +
+                                         ASRS_hyperactivity + ASRS_attention + 
+                                         BDI_shorten_total_score + 
+                                         EAT_dieting + EAT_bulimia + 
+                                         EAT_oral_control + HCL32_active + 
+                                         HCL32_irritable + MSSB_pos + MSSB_neg + 
+                                         MSSB_dis + OCI_R_hoarding + OCI_R_washing + 
+                                         OCI_R_obsessing + OCI_R_ordering + 
+                                         OCI_R_neutralizing + OCI_R_checking, 
+                                data = full_df_dec10_scaled)
+
+summary(regmodel_subscales_full_df_dec10)
+```
+
+```{r}
+check_collinearity(regmodel_subscales_full_df_dec10)
+```
+
+Estimate plot for subscales
+```{r, fig.height = 8, fig.width = 8}
+regmodel_subscales_full_df_dec10_estimate_plot <- plot_model(regmodel_subscales_full_df_dec10, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict_dec10) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates (full dataset, n = 449)")
+
+regmodel_subscales_full_df_dec10_estimate_plot
+```
+
+
+## Bayesian regression
 
 Defining priors:
 ```{r}
@@ -733,8 +770,43 @@ pcor.test(
 ```
 Now the partial correlation is negative, with t-value resembling the one from the regression model.
 
+## Subscale regression model
 
-### Bayesian regression
+Let's explore the regression model, where instead of full questionnaire scores, we use specific subscales, where they are available and full scores when not.
+```{r}
+regmodel_subscales_reduced_df_dec10 <- lm(MWQ_total_score ~ AQ_total_score +
+                                         ASRS_hyperactivity + ASRS_attention + 
+                                         BDI_shorten_total_score + 
+                                         EAT_dieting + EAT_bulimia + 
+                                         EAT_oral_control + HCL32_active + 
+                                         HCL32_irritable + MSSB_pos + MSSB_neg + 
+                                         MSSB_dis + OCI_R_hoarding + OCI_R_washing + 
+                                         OCI_R_obsessing + OCI_R_ordering + 
+                                         OCI_R_neutralizing + OCI_R_checking, 
+                                data = reduced_df_dec10_scaled)
+
+summary(regmodel_subscales_reduced_df_dec10)
+```
+
+```{r}
+check_collinearity(regmodel_subscales_reduced_df_dec10)
+```
+
+Estimate plot for subscales
+```{r, fig.height = 8, fig.width = 8}
+regmodel_subscales_reduced_df_dec10_estimate_plot <- plot_model(regmodel_subscales_reduced_df_dec10, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict_dec10) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates (reduced dataset, n = 376)")
+
+regmodel_subscales_reduced_df_dec10_estimate_plot
+```
+
+## Bayesian regression
 
 Defining priors:
 ```{r}
@@ -896,6 +968,60 @@ corr_tidy_stai_trait_subset_df_dec10 <- as.data.frame(corr_matrix_stai_trait_sub
 corr_tidy_stai_trait_subset_df_dec10
 ```
 
+### Subscale bivariate correlations
+
+```{r}
+corr_matrix_stai_trait_subset_df_dec10_subscales <- stai_trait_subset_df_dec10_scaled %>%
+  dplyr::select(MWQ_total_score,
+                ASRS_hyperactivity,
+                ASRS_attention,
+                MSSB_pos,
+                MSSB_neg,
+                MSSB_dis,
+                AQ_total_score, 
+                OCI_R_hoarding,
+                OCI_R_washing,
+                OCI_R_obsessing,
+                OCI_R_ordering,
+                OCI_R_neutralizing,
+                OCI_R_checking,
+                BDI_shorten_total_score,
+                HCL32_active,
+                HCL32_irritable,
+                EAT_dieting,
+                EAT_bulimia,
+                EAT_oral_control,
+                STAI_trait_total_score) %>%
+  corr.test(method = "spearman", adjust = "fdr")
+```
+
+
+Plotting the matrix:
+```{r, fig.height=10, fig.width=10}
+corr_matrix_stai_trait_subset_dec10_ggplot_subscales <- ggcorrplot(corr_matrix_stai_trait_subset_df_dec10_subscales$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_stai_trait_subset_df_dec10_subscales$p,
+           sig.level = 0.05, 
+           insig = "blank",
+           lab_col = "black",
+           colors = c("#D64541", "white", "#1E8449")) + 
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Bivariate correlations of questionnaires and subscales (STAI trait scores dataset, n = 247)", subtitle = "Below the diagonal, insignificant associations with unadjusted p-values were removed. \nAbove the diagonal, insignificant associations with adjusted p-values were removed.", caption = "FDR correction used for p-value adjustment.") + 
+    scale_x_discrete(labels = name_dict_dec10) +  
+    scale_y_discrete(labels = name_dict_dec10) +  
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+
+corr_matrix_stai_trait_subset_dec10_ggplot_subscales
+```
 
 ## Regression analysis on this dataset
 
@@ -994,8 +1120,45 @@ pcor.test(
 ```
 Now the partial correlation is negative, with t-value resembling the one from the regression model.
 
+## Subscale regression model
 
-### Bayesian regression
+Let's explore the regression model, where instead of full questionnaire scores, we use specific subscales, where they are available and full scores when not.
+```{r}
+regmodel_subscales_stai_trait_subscale_df_dec10 <- lm(MWQ_total_score ~ AQ_total_score +
+                                         ASRS_hyperactivity + ASRS_attention + 
+                                         BDI_shorten_total_score + 
+                                         EAT_dieting + EAT_bulimia + 
+                                         EAT_oral_control + HCL32_active + 
+                                         HCL32_irritable + MSSB_pos + MSSB_neg + 
+                                         MSSB_dis + OCI_R_hoarding + OCI_R_washing + 
+                                         OCI_R_obsessing + OCI_R_ordering + 
+                                         OCI_R_neutralizing + OCI_R_checking + 
+                                           STAI_trait_total_score,
+                                data = stai_trait_subset_df_dec10_scaled)
+
+summary(regmodel_subscales_stai_trait_subscale_df_dec10)
+```
+
+```{r}
+check_collinearity(regmodel_subscales_reduced_df_dec10)
+```
+
+Estimate plot for subscales
+```{r, fig.height = 8, fig.width = 8}
+regmodel_subscales_reduced_df_dec10_estimate_plot <- plot_model(regmodel_subscales_reduced_df_dec10, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict_dec10) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates (reduced dataset, n = 376)")
+
+regmodel_subscales_reduced_df_dec10_estimate_plot
+```
+
+
+## Bayesian regression
 
 Defining priors:
 ```{r}
