@@ -1,0 +1,1065 @@
+---
+title: "Mind wandering ~ spectrum analysis v4"
+author: "Miha Likar"
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    number-sections: true
+    toc-expand: true
+editor: visual
+---
+
+Import required libraries:
+
+```{r, message = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(sjPlot)
+library(performance)
+library(ggeffects)
+library(broom.mixed)
+library(patchwork)
+library(corrplot)
+library(ggcorrplot)
+library(janitor)
+library(psych)
+library(naniar)
+library(corrr)
+library(Hmisc)
+library(fedmatch)
+library(MASS)
+library(sandwich)
+library(lmtest)
+library(kableExtra)
+library(ppcor)
+library(brms)
+library(bridgesampling)
+library(bayestestR)
+library(bayesplot)
+```
+
+
+# Name dictionary
+
+Create a name dictionary to use for clean naming in plots and tables:
+```{r}
+name_dict_dec10 <- c(
+  MWQ_total_score = "MWQ (mind-wandering)",
+  ASRS_total_score = "ASRS (ADHD)", 
+  MSSB_total_score = "MSS-B (schizotypy)",
+  AQ_total_score = "AQ (autism spectrum)",
+  OCI_R_total_score = "OCI-R (OCD)",
+  BDI_shorten_total_score = "BDI short (depression)",
+  HCL32_total_score = "HCL-32 (hypomania)",
+  EAT_total_score = "EAT (eating disorder)",
+  ASRS_hyperactivity = "ASRS - hyperactive, impulsive",
+  ASRS_attention = "ASRS - inattentive",
+  MSSB_pos = "MSS-B - positive",
+  MSSB_neg = "MSS-B - negative",
+  MSSB_dis = "MSS-B - disorganised",
+  OCI_R_hoarding = "OCI-R - hoarding",
+  OCI_R_washing = "OCI-R - washing",
+  OCI_R_obsessing = "OCI-R - obsessing",
+  OCI_R_ordering = "OCI-R - ordering",
+  OCI_R_checking = "OCI-R - checking", 
+  OCI_R_neutralizing = "OCI-R - neutralizing",
+  HCL32_active = "HCL-32 - active/elated",
+  HCL32_irritable = "HCL-32 - risk-taking/irritable",
+  EAT_dieting = "EAT - dieting",
+  EAT_bulimia = "EAT - bulimia, food preoc.",
+  EAT_oral_control = "EAT - oral control",
+  STAI_trait_total_score = "STAI - Trait (anxiety)",
+  STAI_state_total_score = "STAI - State (anxiety)"
+)
+
+```
+
+
+# Overview
+
+Import the dataset finalised on December 9 (cross checking questionnaire score calculations, checking EAT score calculations). 
+
+Create versions of the dataset for the analysis:
+
+- Keep whole merged dataset
+- Exclude diagnosed/medicated participants
+- Keep only participants that have STAI trait scores (data collection 2)
+- Standardise scores of all dataset separately (MWQ for data 1 and data 2 separately)
+
+Perform the same analysis on all datasets:
+
+- bivariate correlations
+- multiple regression model
+- stepwise regression to check the supression effect on MSS-B
+- Bayesian regression
+
+# Import data and create subsets
+
+Import dataset created on December 9.
+
+```{r}
+full_df_dec10 <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/R_project/MW_spectrum_analysis/Data/df_dec9_final_clean.csv")
+```
+
+Determine which participants come from first and which from second data collection round based on presence of STAI trait scores.
+```{r}
+full_df_dec10 <- full_df_dec10 %>%
+  mutate(data_round = ifelse(is.na(STAI_trait_total_score), 1, 2))
+```
+
+
+Create a column in full dataset to determine which participants are diagnosed/medicated and which not.
+
+Create a vector of diag./med. individuals and clean strings.
+```{r}
+diag_meds_ids <- c(
+  "63z6t035",
+  "0ph4kxoj",
+  "s6ye1o1i",
+  "i7buva8v",
+  "ut85pm0q",
+  "5g9je77m",
+  "haqli8xf",
+  "8cav5z8q",
+  "i0g6t95m",
+  "21xapnnh",
+  "ektwqxeh",
+  "bemwo57f",
+  "2wl27dkz",
+  "qfgl4ric",
+  "zshuyb8c",
+  "qbftx87x",
+  "ndrjpwzk",
+  "dmsi5tdj",
+  "og81fihm",
+  "lykz1rsu",
+  "95qq6nys",
+  "adx0ufr2",
+  "gmohu013",
+  "ze5i9tkz",
+  "6gwztzbq",
+  "0ldaeete",
+  "sm7365pn",
+  "6jpt0age",
+  "ixcvnna8",
+  "ov6zilsh",
+  "yk3unkzo",
+  "dnoe2hz9",
+  "7ozph4zo",
+  "z45d64cv",
+  "hogiese2",
+  "3bqwl0jj",
+  "gbvo9nrn",
+  "gr5cbrwq",
+  "x9nkv09r",
+  "dnsmzbhb",
+  "dy5x0rhr",
+  "lq1rtrz8",
+  "7jq058u6",
+  "95lns0zf",
+  "n2szmnl5",
+  "1ki6ebat",
+  "o06rjn6t",
+  "g23mmrfq",
+  "avz00bwo",
+  "vxh4ur6x",
+  "hdpd91sm",
+  "3341mkgq",
+  "h0asw03a",
+  "54c6u933",
+  "n0jkqduu",
+  "20ag2xli",
+  "68blqj6y",
+  "oszs6wd6",
+  "x8ur0rap",
+  "35174ahw",
+  "b3q1m2le",
+  "onaesdhm",
+  "a8ivujkd",
+  "ellwx9rd",
+  "svrixmaf",
+  "et5culbq",
+  "cv8tpy4u",
+  "e260c445",
+  "xueabdvq",
+  "p04o1y03",
+  "ia304by3",
+  "9wctu8gu",
+  "3rsrjkky",
+  "me1t6vv5",
+  "eakvtfdc",
+  "9hbdbxgw",
+  "jlaro2kk",
+  "r7uo6kot",
+  "17ox37sw",
+  "gf2qoo07",
+  "tlzx847n",
+  "utvey5kc",
+  "blxzug9z",
+  "16snqjzk",
+  "zr3yrq41",
+  "2lrrsgi6",
+  "vysq3qau",
+  "zwzuyd36",
+  "b4saauq7",
+  "77bfjf3x",
+  "w0u5nqql",
+  "mpn7aupi",
+  "yq52hu7k",
+  "hxfhs230",
+  "5lm4glqo",
+  "q6ns0zck",
+  "7loy5j9t",
+  "99d8l5gl",
+  "lw419k1p",
+  "13seioww",
+  "164tmzlj",
+  "23494jc4",
+  "3qzx294k",
+  "4nv5m7yx",
+  "4rmt1ar5",
+  "8xoan1n8",
+  "9hhm7s47",
+  "9se1irn2",
+  "ab2s9eeh",
+  "agwqr49o",
+  "ct07b9dg",
+  "ep3wieca",
+  "gn1ptsuw",
+  "ha0js9y8",
+  "hfmab4tm",
+  "hga7jjmn",
+  "imfjt2n7",
+  "k63i72ms",
+  "kf5awxvi",
+  "kw4xkou0",
+  "mdi2125e",
+  "mj7qaz5g",
+  "mvcwnvgm",
+  "mwnayhk6",
+  "mxcsnw2u",
+  "qo6jqf42",
+  "qos3imhy",
+  "sf5pqpv3",
+  "sylgkmo4",
+  "tltleqqw",
+  "u1p57hh3",
+  "vq6edse3",
+  "vt8phx0n",
+  "w0vokgkx",
+  "w59nc10h",
+  "x234zqip",
+  "x6sy0ekg",
+  "xqpdq4bn",
+  "yh8ipmjq",
+  "ykbt03tb",
+  "z5gpqcuq",
+  "ze6x18f9")
+
+# Clean the names in the vector
+diag_meds_ids <- clean_strings(diag_meds_ids)
+```
+
+Create a column:
+```{r}
+full_df_dec10 <- full_df_dec10 %>%
+  mutate(diag_meds = ifelse(Participant.Public.ID %in% diag_meds_ids, 1, 0))
+```
+
+
+Create a subset of all participants who are not diagnosed/medicated:
+```{r}
+reduced_df_dec10 <- full_df_dec10 %>%
+  filter(diag_meds == 0)
+```
+
+Create a subset of participants who are not diagnosed/medicated and have STAI trait scores:
+```{r}
+stai_trait_subset_df_dec10 <- full_df_dec10 %>%
+  filter(diag_meds == 0 & data_round == 2)
+```
+
+
+**Overview of three datasets:**
+
+- Total df: 449 observations
+- No diag./med. df: 376 observations
+- No diag./med. + STAI trait: 247 observations
+
+# Full dataset analysis
+
+## Standardise scores
+MWQ should be standardised separately for data rounds 1 and 2, all the other can be standardised across whole sample.
+```{r}
+full_df_dec10_scaled <- full_df_dec10 %>%
+  group_by(data_round) %>%
+  mutate(MWQ_total_score = as.numeric(scale(MWQ_total_score))) %>%
+  ungroup() %>%
+  mutate(across(
+    c("age",
+      "AQ_total_score",
+      "ASRS_total_score", "ASRS_hyperactivity", "ASRS_attention",
+      "BDI_shorten_total_score",
+      "EAT_total_score", "EAT_dieting", "EAT_bulimia", "EAT_oral_control", 
+      "HCL32_total_score", "HCL32_active", "HCL32_irritable",
+      "MSSB_total_score", "MSSB_pos", "MSSB_neg", "MSSB_dis",
+      "OCI_R_total_score", "OCI_R_hoarding", "OCI_R_washing", 
+      "OCI_R_obsessing", "OCI_R_ordering", "OCI_R_neutralizing", "OCI_R_checking",
+      "STAI_state_total_score"),
+    ~ as.numeric(scale(.))
+  ))
+```
+
+## Bivariate correlations
+
+Create bivariate correlation matrix with FDR adjusment/correction for p-values.
+```{r}
+corr_matrix_full_df_dec10 <- full_df_dec10_scaled %>%
+  dplyr::select(MWQ_total_score,
+                ASRS_total_score,  
+                MSSB_total_score,
+                AQ_total_score, 
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  corr.test(method = "spearman", adjust = "fdr")
+```
+
+
+Plotting the matrix:
+```{r, fig.height=8, fig.width=8}
+corr_matrix_full_df_dec10_ggplot <- ggcorrplot(corr_matrix_full_df_dec10$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_dull_df_dec10$p,
+           sig.level = 0.05, 
+           insig = "blank",
+           lab_col = "black",
+           colors = c("#D64541", "white", "#1E8449")) + 
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Bivariate correlations of questionnaires (full dataset, n = 449)", subtitle = "Below the diagonal, insignificant associations with unadjusted p-values were removed. \nAbove the diagonal, insignificant associations with adjusted p-values were removed.", caption = "FDR correction used for p-value adjustment.") + 
+    scale_x_discrete(labels = name_dict_dec10) +  
+    scale_y_discrete(labels = name_dict_dec10) +  
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+
+corr_matrix_full_df_dec10_ggplot
+```
+
+Create bivariate correlation table:
+```{r}
+total_n_full_df_dec10_df <- corr_matrix_full_df_dec10$n
+total_df_full_df_dec10 <- total_n_full_df_dec10_df - 2
+
+corr_tidy_full_df_dec10 <- as.data.frame(corr_matrix_full_df_dec10$r) %>%
+  rownames_to_column("var1") %>%
+  pivot_longer(-var1, names_to = "var2", values_to = "r") %>%
+  left_join(
+    as.data.frame(corr_matrix_full_df_dec10$p) %>%
+      rownames_to_column("var1") %>%
+      pivot_longer(-var1, names_to = "var2", values_to = "p"),
+    by = c("var1", "var2")
+  ) %>%
+  mutate(
+    n  = total_n_full_df_dec10_df,
+    df = total_df_full_df_dec10
+  ) %>%
+  filter(var1 != var2) %>%
+  mutate(
+    p_fdr = p.adjust(p, method = "fdr")
+  )  # Remove self-correlations
+
+corr_tidy_full_df_dec10
+```
+
+
+## Regression analysis on this dataset
+
+```{r}
+regmodel_full_df_dec10 <- lm(MWQ_total_score ~ ASRS_total_score + MSSB_total_score + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score, 
+                                data = full_df_dec10_scaled)
+
+summary(regmodel_full_df_dec10)
+```
+
+
+Estimates for the model with full dataset (n = 449):
+```{r}
+regmodel_full_df_dec10_estimate_plot <- plot_model(regmodel_full_df_dec10, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict_dec10) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates (full dataset, n = 449)")
+
+regmodel_full_df_dec10_estimate_plot
+```
+
+### MSS-B supression effect
+
+Let's now create step-wise regression models from MSS-B as the only predictor, to adding other predictors and see which of them suppress the positive association of MSS-B with MW and change the sign to negative association. 
+
+```{r}
+sw_regmodel_full_df_dec10_M1 <- lm(MWQ_total_score ~ MSSB_total_score, 
+                                data = full_df_dec10_scaled)
+
+summary(sw_regmodel_full_df_dec10_M1)
+```
+As expected from the bivariate regression models, there is a positive association between MSS-B and MWQ.
+
+Add ADHD first
+```{r}
+sw_regmodel_full_df_dec10_M2 <- lm(MWQ_total_score ~ MSSB_total_score + ASRS_total_score, 
+                                data = full_df_dec10_scaled)
+
+summary(sw_regmodel_full_df_dec10_M2)
+```
+It seems that only if we add ASRS (ADHD) as an additional predictor, the effect of MSS-B changes the direction. From the bivariate correlation table we can see that there is a high positive correlation between MSS-B and ASRS.
+
+**SUPPRESSION EFFECT:**
+
+In our data, MSS-B, ASRS, and mind wandering are all positively correlated with each other. But when we include both MSS-B and ASRS in the same regression model, the effect of MSS-B switches from positive to negative. This pattern is a classic example of a suppression effect.
+
+What happens is that MSSB and ASRS share a large amount of variance—they overlap strongly. That shared component is positively related to mind wandering, and this is what we see in the simple correlation between MSS-B and mind wandering. But when we statistically control for ASRS, we remove that shared variance from MSS-B. What is left is the unique part of MSSB that does not overlap with ASRS.
+
+Once this unique component is isolated, it shows a negative relationship with mind wandering. In other words, MSS-B contains two opposing sources of variance: one part that overlaps with ASRS and relates positively to mind wandering, and another unique part that relates negatively. The sign flip in the regression coefficient is exactly what we expect when suppression is operating.
+
+Let's now add more predictors, especially the ones that are highly correlated with MSS-B in the bivariate correlations (BDI, OCI-R, AQ).
+
+```{r}
+sw_regmodel_full_df_dec10_M3 <- lm(MWQ_total_score ~ MSSB_total_score + ASRS_total_score + AQ_total_score + BDI_shorten_total_score + OCI_R_total_score, 
+                                data = full_df_dec10_scaled)
+
+summary(sw_regmodel_full_df_dec10_M3)
+```
+
+
+### Additional testing with partial correlation
+
+**Compute the (partial) correlation between x and y, while controlling for z (can be multiple variables).**
+
+```{r}
+pcor.test(
+  x = full_df_dec10_scaled$MWQ_total_score,
+  y = full_df_dec10_scaled$MSSB_total_score,
+  z = full_df_dec10_scaled[, c(
+    "ASRS_total_score",
+    "AQ_total_score",
+    "BDI_shorten_total_score",
+    "OCI_R_total_score"
+  )],
+  method = "spearman"
+)
+```
+Although MSS-B showed a positive zero-order correlation with mind-wandering (r = .26), the partial correlation controlling for ASRS, OCI-R, AQ and BDI was practically 0 (partial r = 0.0005, p = 0.991). However, let's try to also do pearson correlation, because it more closely resembles linear relationship modeled with the regression model.
+
+```{r}
+pcor.test(
+  x = full_df_dec10_scaled$MWQ_total_score,
+  y = full_df_dec10_scaled$MSSB_total_score,
+  z = full_df_dec10_scaled[, c(
+    "ASRS_total_score",
+    "AQ_total_score",
+    "BDI_shorten_total_score",
+    "OCI_R_total_score"
+  )],
+  method = "pearson"
+)
+```
+Now the partial correlation is significantly negative, with t-value resembling the one from the regression model.
+
+
+### Bayesian regression
+
+Defining priors:
+```{r}
+common_priors <- c(
+  prior(normal(0, 1), class = "Intercept"),  # intercept prior (same in both)
+  prior(student_t(3, 0, 1), class = "sigma") # weakly informative prior for residual SD
+)
+
+# priors for the full model (add priors for coefficients 'b')
+full_priors <- c(
+  common_priors,
+  prior(normal(0, 1), class = "b") # prior for all regression coefficients
+)
+```
+
+
+Model with all predictors:
+```{r}
+bayes_model_full_df_dec10_scaled <- brm(MWQ_total_score ~ 
+                                         ASRS_total_score + MSSB_total_score + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score, 
+                                       data = full_df_dec10_scaled,
+                                       family = gaussian(),
+                                       prior = full_priors,
+                                       chains = 4, iter = 20000, warmup = 10000,
+                                       save_pars = save_pars(all = TRUE)
+)
+
+summary(bayes_model_full_df_dec10_scaled)
+```
+
+#### Additional checks of the Bayesian model
+
+Bayesian R-squared
+```{r}
+bayes_R2(bayes_model_full_df_dec10_scaled)
+```
+
+Posterior predictive checks
+```{r}
+pp_check(bayes_model_full_df_dec10_scaled, ndraws = 100, type = "dens_overlay")
+```
+
+Bayes factor
+```{r}
+bayesfactor_parameters(bayes_model_full_df_dec10_scaled)
+```
+
+**Bayesian regression summary (n = 449):**
+
+We ran a Bayesian multiple regression predicting MWQ_total_score from ASRS, MSSB, AQ, OCI-R, BDI, HCL32, and EAT scores. With 449 observations, the model shows excellent convergence (Rhat = 1, high effective sample sizes), indicating that our sample size is sufficient for reliable Bayesian estimation.
+
+Key findings:
+
+- ASRS_total_score: Strong positive association with MWQ (posterior mean ≈ 0.51, 95% credible interval [0.41, 0.61], BF ≈ 9.4e10). Very strong evidence for this effect.
+- HCL32_total_score: Positive association (posterior mean ≈ 0.10, 95% CI [0.02, 0.19], BF ≈ 0.87). Credible interval excludes 0, suggesting some evidence for a positive effect, though Bayes Factor indicates moderate support.
+- MSSB_total_score: Small negative effect (posterior mean ≈ -0.12, 95% CI [-0.23, -0.01], BF ≈ 0.59). Weak evidence; the negative effect is small and uncertain.
+- Other predictors (AQ, OCI-R, BDI, EAT): No strong evidence for effects; credible intervals include 0 and Bayes Factors <1, favoring the null.
+
+
+# Reduced dataset analysis
+
+
+## Standardise scores
+MWQ should be standardised separately for data rounds 1 and 2, all the other can be standardised across whole sample.
+```{r}
+reduced_df_dec10_scaled <- reduced_df_dec10 %>%
+  group_by(data_round) %>%
+  mutate(MWQ_total_score = as.numeric(scale(MWQ_total_score))) %>%
+  ungroup() %>%
+  mutate(across(
+    c("age",
+      "AQ_total_score",
+      "ASRS_total_score", "ASRS_hyperactivity", "ASRS_attention",
+      "BDI_shorten_total_score",
+      "EAT_total_score", "EAT_dieting", "EAT_bulimia", "EAT_oral_control", 
+      "HCL32_total_score", "HCL32_active", "HCL32_irritable",
+      "MSSB_total_score", "MSSB_pos", "MSSB_neg", "MSSB_dis",
+      "OCI_R_total_score", "OCI_R_hoarding", "OCI_R_washing", 
+      "OCI_R_obsessing", "OCI_R_ordering", "OCI_R_neutralizing", "OCI_R_checking",
+      "STAI_state_total_score"),
+    ~ as.numeric(scale(.))
+  ))
+```
+
+## Bivariate correlations
+
+Create bivariate correlation matrix with FDR adjusment/correction for p-values.
+```{r}
+corr_matrix_reduced_df_dec10 <- reduced_df_dec10_scaled %>%
+  dplyr::select(MWQ_total_score,
+                ASRS_total_score,  
+                MSSB_total_score,
+                AQ_total_score, 
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  corr.test(method = "spearman", adjust = "fdr")
+```
+
+
+Plotting the matrix:
+```{r, fig.height=8, fig.width=8}
+corr_matrix_reduced_df_dec10_ggplot <- ggcorrplot(corr_matrix_reduced_df_dec10$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_reduced_df_dec10$p,
+           sig.level = 0.05, 
+           insig = "blank",
+           lab_col = "black",
+           colors = c("#D64541", "white", "#1E8449")) + 
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Bivariate correlations of questionnaires (reduced dataset, n = 376)", subtitle = "Below the diagonal, insignificant associations with unadjusted p-values were removed. \nAbove the diagonal, insignificant associations with adjusted p-values were removed.", caption = "FDR correction used for p-value adjustment.") + 
+    scale_x_discrete(labels = name_dict_dec10) +  
+    scale_y_discrete(labels = name_dict_dec10) +  
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+
+corr_matrix_reduced_df_dec10_ggplot
+```
+
+Create bivariate correlation table:
+```{r}
+total_n_reduced_df_dec10_df <- corr_matrix_reduced_df_dec10$n
+total_df_reduced_df_dec10 <- total_n_reduced_df_dec10_df - 2
+
+corr_tidy_reduced_df_dec10 <- as.data.frame(corr_matrix_reduced_df_dec10$r) %>%
+  rownames_to_column("var1") %>%
+  pivot_longer(-var1, names_to = "var2", values_to = "r") %>%
+  left_join(
+    as.data.frame(corr_matrix_reduced_df_dec10$p) %>%
+      rownames_to_column("var1") %>%
+      pivot_longer(-var1, names_to = "var2", values_to = "p"),
+    by = c("var1", "var2")
+  ) %>%
+  mutate(
+    n  = total_n_reduced_df_dec10_df,
+    df = total_df_reduced_df_dec10
+  ) %>%
+  filter(var1 != var2) %>%
+  mutate(
+    p_fdr = p.adjust(p, method = "fdr")
+  )  # Remove self-correlations
+
+corr_tidy_reduced_df_dec10
+```
+
+
+## Regression analysis on this dataset
+
+```{r}
+regmodel_reduced_df_dec10 <- lm(MWQ_total_score ~ ASRS_total_score + MSSB_total_score + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score, 
+                                data = reduced_df_dec10_scaled)
+
+summary(regmodel_reduced_df_dec10)
+```
+
+
+Estimates for the model with reduced dataset (n = 376):
+```{r}
+regmodel_reduced_df_dec10_estimate_plot <- plot_model(regmodel_reduced_df_dec10, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict_dec10) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates (reduced dataset, n = 376)")
+
+regmodel_reduced_df_dec10_estimate_plot
+```
+
+### MSS-B supression effect
+
+Let's now create step-wise regression models from MSS-B as the only predictor, to adding other predictors and see which of them suppress the positive association of MSS-B with MW and change the sign to negative association. 
+
+```{r}
+sw_regmodel_reduced_df_dec10_M1 <- lm(MWQ_total_score ~ MSSB_total_score, 
+                                data = reduced_df_dec10_scaled)
+
+summary(sw_regmodel_reduced_df_dec10_M1)
+```
+As expected from the bivariate regression models, there is a positive association between MSS-B and MWQ.
+
+Add ADHD first
+```{r}
+sw_regmodel_reduced_df_dec10_M2 <- lm(MWQ_total_score ~ MSSB_total_score + ASRS_total_score, 
+                                data = reduced_df_dec10_scaled)
+
+summary(sw_regmodel_reduced_df_dec10_M2)
+```
+It seems that only if we add ASRS (ADHD) as an additional predictor, the effect of MSS-B changes the direction. From the bivariate correlation table we can see that there is a high positive correlation between MSS-B and ASRS.
+
+**SUPPRESSION EFFECT:**
+
+In our data, MSS-B, ASRS, and mind wandering are all positively correlated with each other. But when we include both MSS-B and ASRS in the same regression model, the effect of MSS-B switches from positive to negative. This pattern is a classic example of a suppression effect.
+
+What happens is that MSSB and ASRS share a large amount of variance—they overlap strongly. That shared component is positively related to mind wandering, and this is what we see in the simple correlation between MSS-B and mind wandering. But when we statistically control for ASRS, we remove that shared variance from MSS-B. What is left is the unique part of MSSB that does not overlap with ASRS.
+
+Once this unique component is isolated, it shows a negative relationship with mind wandering. In other words, MSS-B contains two opposing sources of variance: one part that overlaps with ASRS and relates positively to mind wandering, and another unique part that relates negatively. The sign flip in the regression coefficient is exactly what we expect when suppression is operating.
+
+Let's now add more predictors, especially the ones that are highly correlated with MSS-B in the bivariate correlations (BDI, OCI-R, AQ).
+
+```{r}
+sw_regmodel_reduced_df_dec10_M3 <- lm(MWQ_total_score ~ MSSB_total_score + ASRS_total_score + AQ_total_score + BDI_shorten_total_score + OCI_R_total_score, 
+                                data = reduced_df_dec10_scaled)
+
+summary(sw_regmodel_reduced_df_dec10_M3)
+```
+
+
+### Additional testing with partial correlation
+
+**Compute the (partial) correlation between x and y, while controlling for z (can be multiple variables).**
+
+```{r}
+pcor.test(
+  x = reduced_df_dec10_scaled$MWQ_total_score,
+  y = reduced_df_dec10_scaled$MSSB_total_score,
+  z = reduced_df_dec10_scaled[, c(
+    "ASRS_total_score",
+    "AQ_total_score",
+    "BDI_shorten_total_score",
+    "OCI_R_total_score"
+  )],
+  method = "spearman"
+)
+```
+Although MSS-B showed a positive zero-order correlation with mind-wandering (r = 0.31), the partial correlation controlling for ASRS, OCI-R, AQ and BDI was: partial r = 0.03, p = 0.655. However, let's try to also do pearson correlation, because it more closely resembles linear relationship modeled with the regression model.
+
+```{r}
+pcor.test(
+  x = reduced_df_dec10_scaled$MWQ_total_score,
+  y = reduced_df_dec10_scaled$MSSB_total_score,
+  z = reduced_df_dec10_scaled[, c(
+    "ASRS_total_score",
+    "AQ_total_score",
+    "BDI_shorten_total_score",
+    "OCI_R_total_score"
+  )],
+  method = "pearson"
+)
+```
+Now the partial correlation is negative, with t-value resembling the one from the regression model.
+
+
+### Bayesian regression
+
+Defining priors:
+```{r}
+common_priors <- c(
+  prior(normal(0, 1), class = "Intercept"),  # intercept prior (same in both)
+  prior(student_t(3, 0, 1), class = "sigma") # weakly informative prior for residual SD
+)
+
+# priors for the full model (add priors for coefficients 'b')
+full_priors <- c(
+  common_priors,
+  prior(normal(0, 1), class = "b") # prior for all regression coefficients
+)
+```
+
+
+Model with all predictors:
+```{r}
+bayes_model_reduced_df_dec10_scaled <- brm(MWQ_total_score ~ 
+                                         ASRS_total_score + MSSB_total_score + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score, 
+                                       data = reduced_df_dec10_scaled,
+                                       family = gaussian(),
+                                       prior = full_priors,
+                                       chains = 4, iter = 20000, warmup = 10000,
+                                       save_pars = save_pars(all = TRUE)
+)
+
+summary(bayes_model_reduced_df_dec10_scaled)
+```
+
+#### Additional checks of the Bayesian model
+
+Bayesian R-squared
+```{r}
+bayes_R2(bayes_model_reduced_df_dec10_scaled)
+```
+
+Posterior predictive checks
+```{r}
+pp_check(bayes_model_reduced_df_dec10_scaled, ndraws = 100, type = "dens_overlay")
+```
+
+Bayes factor
+```{r}
+bayesfactor_parameters(bayes_model_reduced_df_dec10_scaled)
+```
+
+**Bayesian regression summary (n = 376):**
+
+We ran a Bayesian multiple regression predicting MWQ_total_score from ASRS, MSSB, AQ, OCI-R, BDI, HCL32, and EAT scores using 376 observations. The model shows excellent convergence (Rhat = 1, high effective sample sizes), indicating that our sample size is sufficient for reliable estimation.
+
+Key findings from posterior estimates and Bayes Factors (Savage-Dickey):
+
+- ASRS_total_score: Strong positive association with MWQ (posterior mean ≈ 0.54, 95% credible interval [0.43, 0.64], BF ≈ 9.9e8). Very strong evidence supporting this effect.
+- MSSB_total_score: Small negative effect (posterior mean ≈ -0.04, 95% CI [-0.16, 0.08], BF ≈ 0.075). Credible interval includes 0, so the effect is weak and uncertain.
+- HCL32_total_score: Positive trend (posterior mean ≈ 0.07, 95% CI [-0.02, 0.16], BF ≈ 0.14). Credible interval also includes 0, indicating weak and uncertain evidence for a positive effect.
+- Other predictors (AQ, OCI-R, BDI, EAT): No strong evidence for effects; credible intervals include 0 and Bayes Factors <0.1, favoring the null.
+
+Interpretation:
+- ASRS shows a very strong positive effect on mind wandering.
+- MSSB and HCL32 show trends in the expected directions, but their credible intervals include 0, meaning we cannot be confident that these effects are different from zero.
+- The remaining predictors provide little to no evidence for an effect.
+
+Conclusion: The reduced dataset still provides reliable Bayesian estimates. ASRS remains a robust predictor, while the potential effects of MSSB and HCL are weak and uncertain, likely reflecting both their smaller effect sizes and the slightly smaller sample.
+
+
+# STAI trait scores dataset analysis
+
+## Standardise scores
+MWQ should be standardised separately for data rounds 1 and 2, all the other can be standardised across whole sample.
+```{r}
+stai_trait_subset_df_dec10_scaled <- stai_trait_subset_df_dec10 %>%
+  group_by(data_round) %>%
+  mutate(MWQ_total_score = as.numeric(scale(MWQ_total_score))) %>%
+  ungroup() %>%
+  mutate(across(
+    c("age",
+      "AQ_total_score",
+      "ASRS_total_score", "ASRS_hyperactivity", "ASRS_attention",
+      "BDI_shorten_total_score",
+      "EAT_total_score", "EAT_dieting", "EAT_bulimia", "EAT_oral_control", 
+      "HCL32_total_score", "HCL32_active", "HCL32_irritable",
+      "MSSB_total_score", "MSSB_pos", "MSSB_neg", "MSSB_dis",
+      "OCI_R_total_score", "OCI_R_hoarding", "OCI_R_washing", 
+      "OCI_R_obsessing", "OCI_R_ordering", "OCI_R_neutralizing", "OCI_R_checking",
+      "STAI_state_total_score", "STAI_trait_total_score"),
+    ~ as.numeric(scale(.))
+  ))
+```
+
+## Bivariate correlations
+
+Create bivariate correlation matrix with FDR adjusment/correction for p-values.
+```{r}
+corr_matrix_stai_trait_subset_df_dec10 <- stai_trait_subset_df_dec10_scaled %>%
+  dplyr::select(MWQ_total_score,
+                ASRS_total_score,  
+                MSSB_total_score,
+                AQ_total_score, 
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score,
+                STAI_trait_total_score) %>%
+  corr.test(method = "spearman", adjust = "fdr")
+```
+
+
+Plotting the matrix:
+```{r, fig.height=8, fig.width=8}
+corr_matrix_stai_trait_subset_dec10_ggplot <- ggcorrplot(corr_matrix_stai_trait_subset_df_dec10$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_stai_trait_subset_df_dec10$p,
+           sig.level = 0.05, 
+           insig = "blank",
+           lab_col = "black",
+           colors = c("#D64541", "white", "#1E8449")) + 
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Bivariate correlations of questionnaires (STAI trait scores dataset, n = 247)", subtitle = "Below the diagonal, insignificant associations with unadjusted p-values were removed. \nAbove the diagonal, insignificant associations with adjusted p-values were removed.", caption = "FDR correction used for p-value adjustment.") + 
+    scale_x_discrete(labels = name_dict_dec10) +  
+    scale_y_discrete(labels = name_dict_dec10) +  
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+
+corr_matrix_stai_trait_subset_dec10_ggplot
+```
+
+Create bivariate correlation table:
+```{r}
+total_n_stai_trait_subset_df_dec10_df <- corr_matrix_stai_trait_subset_df_dec10$n
+total_df_stai_trait_subset_df_dec10 <- total_n_stai_trait_subset_df_dec10_df - 2
+
+corr_tidy_stai_trait_subset_df_dec10 <- as.data.frame(corr_matrix_stai_trait_subset_df_dec10$r) %>%
+  rownames_to_column("var1") %>%
+  pivot_longer(-var1, names_to = "var2", values_to = "r") %>%
+  left_join(
+    as.data.frame(corr_matrix_stai_trait_subset_df_dec10$p) %>%
+      rownames_to_column("var1") %>%
+      pivot_longer(-var1, names_to = "var2", values_to = "p"),
+    by = c("var1", "var2")
+  ) %>%
+  mutate(
+    n  = total_n_stai_trait_subset_df_dec10_df,
+    df = total_df_stai_trait_subset_df_dec10
+  ) %>%
+  filter(var1 != var2) %>%
+  mutate(
+    p_fdr = p.adjust(p, method = "fdr")
+  )  # Remove self-correlations
+
+corr_tidy_stai_trait_subset_df_dec10
+```
+
+
+## Regression analysis on this dataset
+
+```{r}
+regmodel_stai_trait_subset_df_dec10 <- lm(MWQ_total_score ~ ASRS_total_score + MSSB_total_score + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score + STAI_trait_total_score, 
+                                data = stai_trait_subset_df_dec10_scaled)
+
+summary(regmodel_stai_trait_subset_df_dec10)
+```
+
+
+Estimates for the model with reduced dataset (n = 376):
+```{r}
+regmodel_stai_trait_subset_df_dec10_estimate_plot <- plot_model(regmodel_stai_trait_subset_df_dec10, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict_dec10) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates \n(STAI trait scores dataset, n = 247)")
+
+regmodel_stai_trait_subset_df_dec10_estimate_plot
+```
+
+### MSS-B supression effect
+
+Let's now create step-wise regression models from MSS-B as the only predictor, to adding other predictors and see which of them suppress the positive association of MSS-B with MW and change the sign to negative association. 
+
+```{r}
+sw_regmodel_stai_trait_subset_df_dec10_M1 <- lm(MWQ_total_score ~ MSSB_total_score, 
+                                data = stai_trait_subset_df_dec10_scaled)
+
+summary(sw_regmodel_stai_trait_subset_df_dec10_M1)
+```
+As expected from the bivariate regression models, there is a positive association between MSS-B and MWQ.
+
+Add ADHD first
+```{r}
+sw_regmodel_stai_trait_subset_df_dec10_M2 <- lm(MWQ_total_score ~ MSSB_total_score + ASRS_total_score, 
+                                data = stai_trait_subset_df_dec10_scaled)
+
+summary(sw_regmodel_stai_trait_subset_df_dec10_M2)
+```
+It seems that only if we add ASRS (ADHD) as an additional predictor, the effect of MSS-B changes the direction. From the bivariate correlation table we can see that there is a high positive correlation between MSS-B and ASRS.
+
+**SUPPRESSION EFFECT:**
+
+In our data, MSS-B, ASRS, and mind wandering are all positively correlated with each other. But when we include both MSS-B and ASRS in the same regression model, the effect of MSS-B switches from positive to negative. This pattern is a classic example of a suppression effect.
+
+What happens is that MSSB and ASRS share a large amount of variance—they overlap strongly. That shared component is positively related to mind wandering, and this is what we see in the simple correlation between MSS-B and mind wandering. But when we statistically control for ASRS, we remove that shared variance from MSS-B. What is left is the unique part of MSSB that does not overlap with ASRS.
+
+Once this unique component is isolated, it shows a negative relationship with mind wandering. In other words, MSS-B contains two opposing sources of variance: one part that overlaps with ASRS and relates positively to mind wandering, and another unique part that relates negatively. The sign flip in the regression coefficient is exactly what we expect when suppression is operating.
+
+Let's now add more predictors, especially the ones that are highly correlated with MSS-B in the bivariate correlations (BDI, OCI-R, AQ).
+
+```{r}
+sw_regmodel_stai_trait_subset_df_dec10_M3 <- lm(MWQ_total_score ~ MSSB_total_score + ASRS_total_score + AQ_total_score + BDI_shorten_total_score + OCI_R_total_score, 
+                                data = stai_trait_subset_df_dec10_scaled)
+
+summary(sw_regmodel_stai_trait_subset_df_dec10_M3)
+```
+
+
+### Additional testing with partial correlation
+
+**Compute the (partial) correlation between x and y, while controlling for z (can be multiple variables).**
+
+```{r}
+pcor.test(
+  x = stai_trait_subset_df_dec10_scaled$MWQ_total_score,
+  y = stai_trait_subset_df_dec10_scaled$MSSB_total_score,
+  z = stai_trait_subset_df_dec10_scaled[, c(
+    "ASRS_total_score",
+    "AQ_total_score",
+    "BDI_shorten_total_score",
+    "OCI_R_total_score"
+  )],
+  method = "spearman"
+)
+```
+Although MSS-B showed a positive zero-order correlation with mind-wandering (r = 0.24), the partial correlation controlling for ASRS, OCI-R, AQ and BDI was: partial r = -0.081, p = 0.205. However, let's try to also do pearson correlation, because it more closely resambles linear relationship modeled with the regression model.
+
+```{r}
+pcor.test(
+  x = stai_trait_subset_df_dec10_scaled$MWQ_total_score,
+  y = stai_trait_subset_df_dec10_scaled$MSSB_total_score,
+  z = stai_trait_subset_df_dec10_scaled[, c(
+    "ASRS_total_score",
+    "AQ_total_score",
+    "BDI_shorten_total_score",
+    "OCI_R_total_score"
+  )],
+  method = "pearson"
+)
+```
+Now the partial correlation is negative, with t-value resembling the one from the regression model.
+
+
+### Bayesian regression
+
+Defining priors:
+```{r}
+common_priors <- c(
+  prior(normal(0, 1), class = "Intercept"),  # intercept prior (same in both)
+  prior(student_t(3, 0, 1), class = "sigma") # weakly informative prior for residual SD
+)
+
+# priors for the full model (add priors for coefficients 'b')
+full_priors <- c(
+  common_priors,
+  prior(normal(0, 1), class = "b") # prior for all regression coefficients
+)
+```
+
+
+Model with all predictors:
+```{r}
+bayes_model_stai_trait_subset_df_dec10_scaled <- brm(MWQ_total_score ~ 
+                                         ASRS_total_score + MSSB_total_score + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score + STAI_trait_total_score, 
+                                       data = stai_trait_subset_df_dec10_scaled,
+                                       family = gaussian(),
+                                       prior = full_priors,
+                                       chains = 4, iter = 20000, warmup = 10000,
+                                       save_pars = save_pars(all = TRUE)
+)
+
+summary(bayes_model_stai_trait_subset_df_dec10_scaled)
+```
+
+#### Additional checks of the Bayesian model
+
+Bayesian R-squared
+```{r}
+bayes_R2(bayes_model_stai_trait_subset_df_dec10_scaled)
+```
+
+Posterior predictive checks
+```{r}
+pp_check(bayes_model_stai_trait_subset_df_dec10_scaled, ndraws = 100, type = "dens_overlay")
+```
+
+Bayes factor
+```{r}
+bayesfactor_parameters(bayes_model_stai_trait_subset_df_dec10_scaled)
+```
+
+**Bayesian regression summary (n = 247):**
+
+We ran a Bayesian multiple regression predicting MWQ_total_score from ASRS, MSSB, AQ, OCI-R, BDI, HCL32, EAT, and STAI_trait_total_score. The model shows excellent convergence (Rhat = 1, high effective sample sizes), indicating that the sample size is sufficient for reliable Bayesian estimation.
+
+Key findings:
+
+- ASRS_total_score: Strong positive association with MWQ (posterior mean ≈ 0.62, 95% credible interval [0.48, 0.76], BF ≈ 8.8e9). Very strong evidence for this effect.
+- MSSB_total_score: Small negative association (posterior mean ≈ -0.16, 95% CI [-0.31, -0.02], BF ≈ 0.86). Credible interval barely excludes 0, suggesting weak-to-moderate evidence for a negative effect.
+- STAI_trait_total_score: Positive association with MWQ (posterior mean ≈ 0.19, 95% CI [0.05, 0.33], BF ≈ 2.2). The credible interval excludes 0, providing moderate evidence for a positive effect.
+- HCL32_total_score: Positive association (posterior mean ≈ 0.14, 95% CI [0.03, 0.24], BF ≈ 1.43). Credible interval excludes 0, but the Bayes Factor suggests only modest support.
+- Other predictors (AQ, OCI-R, BDI, EAT): Credible intervals include 0 and Bayes Factors <1, favoring the null hypothesis. No strong evidence for effects.
+
+**Conclusion**
+
+Based on both linear multiple regression and Bayesian regression results:
+
+- Including STAI trait scores provides additional predictive information for MWQ that is not captured by the other questionnaires.
+- Both regression frameworks show that STAI_trait is positively associated with MWQ and the effect is credible (CI excludes 0).
+
+Therefore, I believe that for future analyses aiming to capture the associations most accurately, we should seriously consider using the dataset where STAI trait scores are present, even if the sample size is slightly smaller (n = 247). Or perhaps this is an argument in favour of additional data collection. 

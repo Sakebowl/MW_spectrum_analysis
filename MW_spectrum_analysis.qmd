@@ -154,9 +154,8 @@ I noticed that for many participants `MSSB_total_score` is missing, but they hav
 
 ```{r}
 df_merged_clean <- df_merged_clean %>%
-  mutate(MSSB_total = rowSums(across(9:46))) %>%
+  mutate(MSSB_total = rowSums(across(all_of(mssb_items)), na.rm = TRUE)) %>%
   dplyr::select(-MSSB_total_score)
-
 ```
 
 Visualise missing data again:

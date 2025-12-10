@@ -1,0 +1,980 @@
+---
+title: "Mind wandering ~ Spectrum analysis v3"
+author: "Miha Likar"
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    number-sections: true
+    toc-expand: true
+editor: visual
+---
+
+Import required libraries:
+
+```{r, message = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(sjPlot)
+library(performance)
+library(ggeffects)
+library(broom.mixed)
+library(patchwork)
+library(corrplot)
+library(ggcorrplot)
+library(janitor)
+library(psych)
+library(naniar)
+library(corrr)
+library(Hmisc)
+library(fedmatch)
+library(MASS)
+library(sandwich)
+library(lmtest)
+library(kableExtra)
+library(ppcor)
+library(brms)
+library(bridgesampling)
+library(bayestestR)
+```
+
+# Name dictionary
+
+Create a name dictionary to use for clean naming in plots and tables:
+```{r}
+name_dict <- c(
+  mwq_total_score = "MWQ (mind-wandering)",
+  ASRS_total_score = "ASRS (ADHD)", 
+  MSSB_total = "MSS-B (schizotypy)",
+  AQ_total_score = "AQ (autism spectrum)",
+  OCI_R_total_score = "OCI-R (OCD)",
+  BDI_shorten_total_score = "BDI short (depression)",
+  HCL32_total_score = "HCL-32 (hypomania)",
+  EAT_total_score = "EAT (eating disorder)",
+  ASRS_hyper_impulse = "ASRS - hyperactive, impulsive",
+  ASRS_inattentive = "ASRS - inattentive",
+  MSSB_positive = "MSS-B - positive",
+  MSSB_negative = "MSS-B - negative",
+  MSSB_disorganised = "MSS-B - disorganised",
+  OCI_R_hoard = "OCI-R - hoarding",
+  OCI_R_wash = "OCI-R - washing",
+  OCI_R_obsess = "OCI-R - obsessing",
+  OCI_R_order = "OCI-R - ordering",
+  OCI_R_check = "OCI-R - checking", 
+  OCI_R_neutral = "OCI-R - neutralizing",
+  HCL32_act = "HCL-32 - active/elated",
+  HCL32_irrit = "HCL-32 - risk-taking/irritable",
+  EAT_diet = "EAT - dieting",
+  EAT_bul_foodpreoc = "EAT - bulimia, food preoc.",
+  EAT_oral_ctrl = "EAT - oral control",
+  STAI_trait_total = "STAI - Trait (anxiety)"
+)
+```
+
+
+# Import initial data
+451 observations, 385 variables.
+
+Compared to original merged dataset, in this dataset observations with missing MWQ values (237) or missing data in majority of questionnaires (21) were removed.
+
+```{r}
+df_merged_clean <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/R_project/MW_spectrum_analysis/Data/df_merged_clean_oct13.csv")
+```
+
+
+
+# Dataset organisation
+
+We have to do a few additional pre-processing steps on the merged dataset:
+
+- Determine which part of the dataset is 1 and which is 2
+- Standardise MWQ scores separately for each dataset
+
+
+```{r}
+df_merged_clean_v3 <- df_merged_clean %>%
+  mutate(data_round = ifelse(is.na(STAI_trait_21), 1, 2))
+```
+
+
+We have to calculate scores for specific subscales of different questionnaires, as they were not calculated for all participants.
+
+MSSB
+```{r}
+mssb_positive <- c(
+  "MSSB_2",
+  "MSSB_5",
+  "MSSB_8",
+  "MSSB_11",
+  "MSSB_14",
+  "MSSB_17",
+  "MSSB_20",
+  "MSSB_23",
+  "MSSB_26",
+  "MSSB_29",
+  "MSSB_32",
+  "MSSB_35",
+  "MSSB_38"
+)
+
+mssb_negative <- c(
+  "MSSB_1",
+  "MSSB_4",
+  "MSSB_7",
+  "MSSB_10",
+  "MSSB_13",
+  "MSSB_16",
+  "MSSB_19",
+  "MSSB_22",
+  "MSSB_25",
+  "MSSB_28",
+  "MSSB_31",
+  "MSSB_34",
+  "MSSB_37"
+)
+
+mssb_disorganised <- c(
+  "MSSB_3",
+  "MSSB_6",
+  "MSSB_9",
+  "MSSB_12",
+  "MSSB_15",
+  "MSSB_18",
+  "MSSB_21",
+  "MSSB_24",
+  "MSSB_27",
+  "MSSB_30",
+  "MSSB_33",
+  "MSSB_36"
+)
+```
+
+
+OCI-R
+```{r}
+oci_r_washing <- c(
+  "OCI_R_5",
+  "OCI_R_11",
+  "OCI_R_17"
+)
+
+oci_r_obsessing <- c(
+  "OCI_R_6",
+  "OCI_R_12",
+  "OCI_R_18"
+)
+
+oci_r_hoarding <- c(
+  "OCI_R_1",
+  "OCI_R_7",
+  "OCI_R_13"
+)
+
+oci_r_ordering <- c(
+  "OCI_R_3",
+  "OCI_R_9",
+  "OCI_R_15"
+)
+
+oci_r_checking <- c(
+  "OCI_R_2",
+  "OCI_R_8",
+  "OCI_R_14"
+)
+
+oci_r_neutralising <- c(
+  "OCI_R_4",
+  "OCI_R_10",
+  "OCI_R_16"
+)
+```
+
+
+ASRS
+
+```{r}
+asrs_hyper_impuls <- c(
+  "ASRS_5",
+  "ASRS_6",
+  "ASRS_12",
+  "ASRS_13",
+  "ASRS_14",
+  "ASRS_15",
+  "ASRS_16",
+  "ASRS_17",
+  "ASRS_18"
+)
+
+asrs_inattentive <- c(
+  "ASRS_1",
+  "ASRS_2",
+  "ASRS_3",
+  "ASRS_4",
+  "ASRS_7",
+  "ASRS_8",
+  "ASRS_9",
+  "ASRS_10",
+  "ASRS_11"
+)
+```
+
+EAT-26
+
+```{r}
+eat_dieting <- c(
+  "EAT_1",
+  "EAT_6",
+  "EAT_7",
+  "EAT_10",
+  "EAT_11",
+  "EAT_12",
+  "EAT_14",
+  "EAT_16",
+  "EAT_17",
+  "EAT_22",
+  "EAT_23",
+  "EAT_24",
+  "EAT_26"
+)
+
+eat_bul_foodpreoc <- c(
+  "EAT_3",
+  "EAT_4",
+  "EAT_9",
+  "EAT_18",
+  "EAT_21",
+  "EAT_25"
+)
+
+eat_oral_ctrl <- c(
+  "EAT_2",
+  "EAT_5",
+  "EAT_8",
+  "EAT_13",
+  "EAT_15",
+  "EAT_19",
+  "EAT_20"
+)
+
+eat_all_items <- c(
+  "EAT_2",
+  "EAT_5",
+  "EAT_8",
+  "EAT_13",
+  "EAT_15",
+  "EAT_19",
+  "EAT_20",
+  "EAT_3",
+  "EAT_4",
+  "EAT_9",
+  "EAT_18",
+  "EAT_21",
+  "EAT_25",
+  "EAT_1",
+  "EAT_6",
+  "EAT_7",
+  "EAT_10",
+  "EAT_11",
+  "EAT_12",
+  "EAT_14",
+  "EAT_16",
+  "EAT_17",
+  "EAT_22",
+  "EAT_23",
+  "EAT_24",
+  "EAT_26"
+)
+```
+
+HCL-32
+
+```{r}
+hcl_active <- c(
+  "HCL32_2",
+  "HCL32_3",
+  "HCL32_4",
+  "HCL32_5",
+  "HCL32_6",
+  "HCL32_10",
+  "HCL32_11",
+  "HCL32_12",
+  "HCL32_13",
+  "HCL32_15",
+  "HCL32_16",
+  "HCL32_19",
+  "HCL32_20",
+  "HCL32_22",
+  "HCL32_24",
+  "HCL32_28"
+)
+
+hcl_irritable <- c(
+  "HCL32_7",
+  "HCL32_8",
+  "HCL32_9",
+  "HCL32_21",
+  "HCL32_25",
+  "HCL32_26",
+  "HCL32_27",
+  "HCL32_31",
+  "HCL32_32"
+)
+```
+
+STAI
+```{r}
+STAI_state <- c(
+  "STAI_state_1",
+  "STAI_state_2",
+  "STAI_state_3",
+  "STAI_state_4",
+  "STAI_state_5",
+  "STAI_state_6",
+  "STAI_state_7",
+  "STAI_state_8",
+  "STAI_state_9",
+  "STAI_state_10",
+  "STAI_state_11",
+  "STAI_state_12.quantised",
+  "STAI_state_13.quantised",
+  "STAI_state_12",
+  "STAI_state_13",
+  "STAI_state_14",
+  "STAI_state_15",
+  "STAI_state_16",
+  "STAI_state_17",
+  "STAI_state_18",
+  "STAI_state_19",
+  "STAI_state_20")
+
+STAI_trait <- c(
+  "STAI_trait_21",
+  "STAI_trait_22",
+  "STAI_trait_23",
+  "STAI_trait_24",
+  "STAI_trait_25",
+  "STAI_trait_26",
+  "STAI_trait_27",
+  "STAI_trait_28",
+  "STAI_trait_29",
+  "STAI_trait_30",
+  "STAI_trait_31",
+  "STAI_trait_32",
+  "STAI_trait_33",
+  "STAI_trait_34",
+  "STAI_trait_35",
+  "STAI_trait_36",
+  "STAI_trait_37",
+  "STAI_trait_38",
+  "STAI_trait_39",
+  "STAI_trait_40"
+)
+```
+
+
+
+Re-calculate subscale scores:
+```{r}
+df_merged_clean_subscales_v3 <- df_merged_clean_v3 %>%
+  mutate(MSSB_positive = rowSums(across(all_of(mssb_positive)))) %>%
+  mutate(MSSB_negative = rowSums(across(all_of(mssb_negative)))) %>%
+  mutate(MSSB_disorganised = rowSums(across(all_of(mssb_disorganised)))) %>%
+  
+  mutate(OCI_R_hoard = rowSums(across(all_of(oci_r_hoarding)))) %>%
+  mutate(OCI_R_wash = rowSums(across(all_of(oci_r_washing)))) %>%
+  mutate(OCI_R_obsess = rowSums(across(all_of(oci_r_obsessing)))) %>%
+  mutate(OCI_R_order = rowSums(across(all_of(oci_r_ordering)))) %>%
+  mutate(OCI_R_check = rowSums(across(all_of(oci_r_checking)))) %>%
+  mutate(OCI_R_neutral = rowSums(across(all_of(oci_r_neutralising)))) %>%
+  
+  mutate(ASRS_hyper_impulse = rowSums(across(all_of(asrs_hyper_impuls)))) %>%
+  mutate(ASRS_inattentive = rowSums(across(all_of(asrs_inattentive)))) %>%
+  
+  mutate(EAT_diet = rowSums(across(all_of(eat_dieting)))) %>%
+  mutate(EAT_bul_foodpreoc = rowSums(across(all_of(eat_bul_foodpreoc)))) %>%
+  mutate(EAT_oral_ctrl = rowSums(across(all_of(eat_oral_ctrl)))) %>%
+  
+  mutate(HCL32_act = rowSums(across(all_of(hcl_active)))) %>%
+  mutate(HCL32_irrit = rowSums(across(all_of(hcl_irritable)))) %>%
+  
+  mutate(STAI_state_total = rowSums(across(all_of(STAI_state)), na.rm = TRUE)) %>%
+  mutate(STAI_trait_total = rowSums(across(all_of(STAI_trait))))
+```
+
+
+Check that previously calculated subscales match the new caluclations:
+
+MSS-B and ASRS (as there are all datapoints in both versions):
+```{r}
+df_merged_clean_subscales_v3 %>%
+  summarise(total_cases = n(),
+    asrs_hyperactive_match = sum(ASRS_hyper_impulse == ASRS_hyperactivity),
+            asrs_inattentice_match = sum(ASRS_inattentive == ASRS_attention),
+            mssb_pos_match = sum(MSSB_positive == MSSB_pos),
+            mssb_neg_match = sum(MSSB_negative == MSSB_neg),
+            mssb_dis_match = sum(MSSB_disorganised == MSSB_dis)) %>%
+  t()
+```
+
+
+```{r}
+df_merged_clean_subscales_v3 %>%
+  #filter(!is.na(HCL32_active)) %>%
+  summarise(total_cases = n(),
+            hcl_act_match = sum(HCL32_active == HCL32_act, na.rm = TRUE),
+            hcl_irr_match = sum(HCL32_irritable == HCL32_irrit, na.rm = TRUE),
+            
+            oci_hoard_match = sum(OCI_R_hoarding == OCI_R_hoard, na.rm = TRUE),
+            oci_wash_match = sum(OCI_R_washing == OCI_R_wash, na.rm = TRUE),
+            oci_obsess_match = sum(OCI_R_obsessing == OCI_R_obsess, na.rm = TRUE),
+            oci_order_match = sum(OCI_R_ordering == OCI_R_order, na.rm = TRUE),
+            oci_neutral_match = sum(OCI_R_neutralizing == OCI_R_neutral, na.rm = TRUE),
+            oci_check_match = sum(OCI_R_checking == OCI_R_check, na.rm = TRUE),
+            
+            eat_diet_match = sum(EAT_dieting == EAT_diet, na.rm = TRUE),
+            eat_bulimia_match = sum(EAT_bulimia == EAT_bul_foodpreoc, na.rm = TRUE),
+            eat_oral_ctrl_match = sum(EAT_oral_control == EAT_oral_ctrl, na.rm = TRUE),
+            
+            STAI_state_match = sum(STAI_state_sum == STAI_state_total, na.rm = TRUE)) %>%
+  t()
+  
+
+df_merged_clean_subscales_v3 %>%
+  filter(EAT_oral_control != EAT_oral_ctrl) %>%
+  dplyr::select(data_round)
+
+df_merged_clean_subscales_v3 %>%
+  filter(EAT_bulimia != EAT_bul_foodpreoc) %>%
+  dplyr::select(data_round)
+
+df_merged_clean_subscales_v3 %>%
+  filter(EAT_dieting != EAT_diet) %>%
+  dplyr::select(data_round)
+
+summarise(eat_all_match = sum(EAT_total_sum == EAT_total_score, na.rm = TRUE))
+
+df_merged_clean_subscales_v3 %>%
+  mutate(EAT_total_sum = rowSums(across(all_of(eat_all_items)))) %>%
+  filter(EAT_total_sum == EAT_total_score) %>%
+  dplyr::select(EAT_total_sum, EAT_total_score, data_round)
+
+
+```
+
+**IMPROTANT**: values in EAT_ subscales are not matching in all cases, need to check with Bianka how she calculated the scores. I followed this resource: https://www.eat-26.com/wp-content/uploads/2021/02/EAT-26IntpretScoring-Test-11-1-17.pdf. 
+
+
+
+```{r}
+df_full_3 <- df_merged_clean_subscales_v3 %>%
+  dplyr::select(Participant.Public.ID,
+    mwq_total_score, 
+                ASRS_total_score, ASRS_hyper_impulse, ASRS_inattentive,
+                MSSB_total, MSSB_positive, MSSB_negative, MSSB_disorganised,
+                AQ_total_score,
+                OCI_R_total_score, OCI_R_hoard, OCI_R_wash, 
+                OCI_R_obsess, OCI_R_order, OCI_R_check, OCI_R_neutral,
+                BDI_shorten_total_score,
+                HCL32_total_score, HCL32_act, HCL32_irrit,
+                EAT_total_score, EAT_diet, EAT_bul_foodpreoc, EAT_oral_ctrl,
+                STAI_state_total, STAI_trait_total,
+                data_round) %>%
+  filter(!is.na(BDI_shorten_total_score))
+```
+
+**450 observations remain, 1 removed due to missing BDI score.**
+
+```{r}
+all_questionnaires <- c(
+  "mwq_total_score", 
+                "ASRS_total_score", "ASRS_hyper_impulse", "ASRS_inattentive",
+                "MSSB_total", "MSSB_positive", "MSSB_negative", "MSSB_disorganised",
+                "AQ_total_score",
+                "OCI_R_total_score", "OCI_R_hoard", "OCI_R_wash", 
+                "OCI_R_obsess", "OCI_R_order", "OCI_R_check", "OCI_R_neutral",
+                "BDI_shorten_total_score",
+                "HCL32_total_score", "HCL32_act", "HCL32_irrit",
+                "EAT_total_score", "EAT_diet", "EAT_bul_foodpreoc", "EAT_oral_ctrl",
+                "STAI_state_total", "STAI_trait_total"
+)
+```
+
+Count number of observations for each questionnaire based on data collection round
+```{r}
+df_full_3 %>%
+  group_by(data_round) %>%
+  summarise(across(all_of(all_questionnaires), ~ sum(!is.na(.))))
+```
+
+Check how many unique participants there are, because it seems that one participant is repeated:
+```{r}
+df_full_3 %>%
+  count(Participant.Public.ID, sort = TRUE)
+```
+
+Indeed, 49oe8na4 occurs twice. Let's check if the values for these participant are always the same
+```{r}
+df_full_3 %>%
+  filter(Participant.Public.ID == "49oe8na4")
+```
+
+They are not. It seems that this participant responded to all the questionnaire of interest twice, and only MWQ scores are matching. I will only keep the first data.
+
+```{r}
+df_full_3 <- df_full_3 %>%
+  group_by(Participant.Public.ID) %>%
+  slice(1) %>%
+  ungroup()
+
+df_full_3 %>%
+  count(data_round)
+```
+
+This now reduces the dataset to 449 observations in total:
+
+- 170 in the first dataset 
+- 279 in the second dataset
+
+Now the final thing to do is to determine the participants that are medicated/diagnosed.
+
+```{r}
+df_full_3 <- df_full_3 %>%
+  mutate(diag_meds = ifelse(Participant.Public.ID %in% diag_meds_ids, 1, 0))
+
+df_full_3 %>%
+  count(diag_meds, data_round) %>%
+  group_by(diag_meds) %>% 
+  mutate(total_diag_meds = sum(n)) %>%
+  ungroup()
+```
+
+Count number of observations for each questionnaire based on data collection round
+```{r}
+df_full_3 %>%
+  group_by(data_round) %>%
+  summarise(across(all_of(all_questionnaires), ~ sum(is.na(.))))
+  
+```
+
+It matches, that there are 170 NA values in the first dataset and 0 in second dataset for STAI trait scores, as data was not collected in the first dataset.
+
+## Standardising data
+
+We have to standardise data separately for full data and data with diagnosed/medicated participants removed. 
+
+### Full data
+
+Standardise the variables. MWQ needs to be standardised separately for each data collection round
+```{r}
+df_full_3_scaled <- df_full_3 %>%
+  group_by(data_round) %>%
+  mutate(mwq_total_score = as.numeric(scale(mwq_total_score))) %>%
+  ungroup()
+
+df_full_3_scaled <- df_full_3_scaled %>%
+  mutate(across(
+    c("ASRS_total_score", "ASRS_hyper_impulse", "ASRS_inattentive",
+      "MSSB_total", "MSSB_positive", "MSSB_negative", "MSSB_disorganised",
+      "AQ_total_score",
+      "OCI_R_total_score", "OCI_R_hoard", "OCI_R_wash", 
+      "OCI_R_obsess", "OCI_R_order", "OCI_R_check", "OCI_R_neutral",
+      "BDI_shorten_total_score",
+      "HCL32_total_score", "HCL32_act", "HCL32_irrit",
+      "EAT_total_score", "EAT_diet", "EAT_bul_foodpreoc",
+      "EAT_oral_ctrl", "STAI_state_total"),
+    ~ as.numeric(scale(.))
+  ))
+
+df_full_3_scaled <- df_full_3_scaled %>%
+  mutate(
+    STAI_trait_total = (STAI_trait_total - mean(STAI_trait_total, na.rm = TRUE)) /
+                     sd(STAI_trait_total,  na.rm = TRUE)
+  )
+```
+
+
+### Reduced dataset
+
+Subset data
+```{r}
+df_reduced_3 <- df_full_3 %>% 
+  filter(diag_meds == 0)
+```
+
+Standardise the variables. MWQ needs to be standardised separately for each data collection round
+```{r}
+df_reduced_3_scaled <- df_reduced_3 %>%
+  group_by(data_round) %>%
+  mutate(mwq_total_score = as.numeric(scale(mwq_total_score))) %>%
+  ungroup()
+
+df_reduced_3_scaled <- df_reduced_3_scaled %>%
+  mutate(across(
+    c("ASRS_total_score", "ASRS_hyper_impulse", "ASRS_inattentive",
+      "MSSB_total", "MSSB_positive", "MSSB_negative", "MSSB_disorganised",
+      "AQ_total_score",
+      "OCI_R_total_score", "OCI_R_hoard", "OCI_R_wash", 
+      "OCI_R_obsess", "OCI_R_order", "OCI_R_check", "OCI_R_neutral",
+      "BDI_shorten_total_score",
+      "HCL32_total_score", "HCL32_act", "HCL32_irrit",
+      "EAT_total_score", "EAT_diet", "EAT_bul_foodpreoc",
+      "EAT_oral_ctrl", "STAI_state_total"),
+    ~ as.numeric(scale(.))
+  ))
+
+df_reduced_3_scaled <- df_reduced_3_scaled %>%
+  mutate(
+    STAI_trait_total = (STAI_trait_total - mean(STAI_trait_total, na.rm = TRUE)) /
+                     sd(STAI_trait_total,  na.rm = TRUE)
+  )
+```
+
+
+Export the datasets:
+```{r}
+write.csv(df_full_3_scaled, "full_dataset_december3.csv")
+write.csv(df_reduced_3_scaled, "reduced_dataset_december3.csv")
+```
+
+
+#### Investigate how MWQ values differ between standardising in full and reduced dataset
+
+```{r}
+df_reduced_3_scaled_scaling_comparison <- df_reduced_3_scaled %>%
+  dplyr::select(Participant.Public.ID, mwq_total_score)
+
+df_full_3_scaled %>%
+  dplyr::select(Participant.Public.ID, mwq_total_score) %>%
+  dplyr::filter(!Participant.Public.ID %in% diag_meds_ids) %>%
+  left_join(df_reduced_3_scaled_scaling_comparison, by = "Participant.Public.ID")
+```
+
+# Cross checking total questionnaire score calculations
+
+Create a copy of the dataset to cross check
+
+```{r}
+df_quest_cross_check <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/R_project/MW_spectrum_analysis/Data/merged_clean_data_dec4.csv")
+```
+
+Create vectors of items:
+```{r}
+mwq_items <- paste0("mwq_", c(1:5))
+mssb_items <- paste0("MSSB_", c(1:38))
+ocir_items <- paste0("OCI_R_", c(1:18))
+aq_items <- paste0("AQ_", c(1:50))
+asrs_items <- paste0("ASRS_", c(1:18))
+bdi_items <- paste0("BDI_shorten_", c(1:9))
+eat_items <- paste0("EAT_", c(1:26))
+hcl_items <- paste0("HCL32_", c(1:32))
+stai_trait_items <- paste0("STAI_trait_", c(21:40))
+```
+
+Calculate total scores:
+
+```{r}
+df_quest_cross_check %>%
+  mutate(mwq_total_miha = rowSums(across(all_of(mwq_items)), na.rm = TRUE),
+         mssb_total_miha = rowSums(across(all_of(mssb_items)), na.rm = TRUE),
+         ocir_total_miha = rowSums(across(all_of(ocir_items)), na.rm = TRUE),
+         aq_total_miha = rowSums(across(all_of(aq_items)), na.rm = TRUE),
+         asrs_total_miha = rowSums(across(all_of(asrs_items)), na.rm = TRUE),
+         bdi_total_miha = rowSums(across(all_of(bdi_items)), na.rm = TRUE),
+         eat_total_miha = rowSums(across(all_of(eat_items)), na.rm = TRUE),
+         hcl_total_miha = rowSums(across(all_of(hcl_items)), na.rm = TRUE),
+         stai_trait_total_miha = rowSums(across(all_of(stai_trait_items)), na.rm = TRUE)) %>%
+  summarise(total_cases = n(),
+    mwq_match = sum(mwq_total_miha == mwq_total_score),
+    mssb_match = sum(mssb_total_miha == MSSB_total),
+    ocir_match = sum(ocir_total_miha == OCI_R_total_score),
+    aq_match = sum(aq_total_miha == AQ_total_score),
+    asrs_match = sum(asrs_total_miha == ASRS_total_score),
+    bdi_match = sum(bdi_total_miha == BDI_shorten_total_score, na.rm = TRUE),
+    eat_match = sum(eat_total_miha == EAT_total_score),
+    hcl_match = sum(hcl_total_miha == HCL32_total_score),
+    stai_trait_match = sum(stai_trait_total_miha == STAI_trait_sum, na.rm = TRUE))
+  
+```
+
+# Analysis
+
+Few things need to be done as additional steps of the analysis:
+
+- focus only on the unmedicated/undiagnosed group
+- explore bivariate correlations and regression model in people that have STAI trait score
+- perform some step-wise regression to see where the supression effect over MSS-B comes from
+- Bayesian regression
+
+## STAI trait subsample
+
+### Bivariate correlations and regression model with STAI trait scores
+
+#### Create a subset of full data
+Only select observations that have STAI trait score in the reduced // undiagnosed/unmedicated dataset
+
+```{r}
+df_undiag_stai_trait <- df_reduced_3_scaled %>%
+  filter(!is.na(STAI_trait_total))
+```
+
+
+Run a Spearman correlation test to use for matrix (FDR correction for multiple tests):
+```{r}
+corr_matrix_undiag_stai_trait <- df_undiag_stai_trait %>%
+  dplyr::select(mwq_total_score,
+                STAI_trait_total,
+                ASRS_total_score,  
+                MSSB_total,
+                AQ_total_score, 
+                OCI_R_total_score,
+                BDI_shorten_total_score,
+                HCL32_total_score,
+                EAT_total_score) %>%
+  corr.test(method = "spearman", adjust = "fdr")
+```
+
+Plotting the matrix:
+```{r, fig.height=8, fig.width=8}
+corr_matrix_undiag_stai_trait_ggplot <- ggcorrplot(corr_matrix_undiag_stai_trait$r, 
+           type = "full",
+           lab = TRUE, 
+           lab_size = 4,
+           p.mat = corr_matrix_undiag_stai_trait$p,
+           sig.level = 0.05, 
+           insig = "blank",
+           lab_col = "black",
+           colors = c("#D64541", "white", "#1E8449")) + 
+  theme_minimal() + 
+  labs(x = NULL, y = NULL, title = "Bivariate correlations of questionnaires", subtitle = "Below the diagonal, insignificant associations with unadjusted p-values were removed. \nAbove the diagonal, insignificant associations with adjusted p-values were removed.", caption = "FDR correction used for p-value adjustment.") + 
+    scale_x_discrete(labels = name_dict) +  
+    scale_y_discrete(labels = name_dict) +  
+    theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title.position = "plot",      # aligns relative to the entire plot
+    plot.subtitle.position = "plot",   # aligns relative to the entire plot
+    plot.caption.position = "plot",
+    plot.title = element_text(hjust = 0), 
+    plot.subtitle = element_text(hjust = 0)
+  )
+
+corr_matrix_undiag_stai_trait_ggplot
+```
+
+Create bivariate correlation table:
+```{r}
+total_n_undiag_stai_trait_df <- corr_matrix_undiag_stai_trait$n
+total_df_undiag_stai_trait_df <- total_n_undiag_stai_trait_df - 2
+
+corr_tidy_undiag_stai_trait_df <- as.data.frame(corr_matrix_undiag_stai_trait$r) %>%
+  rownames_to_column("var1") %>%
+  pivot_longer(-var1, names_to = "var2", values_to = "r") %>%
+  left_join(
+    as.data.frame(corr_matrix_undiag_stai_trait$p) %>%
+      rownames_to_column("var1") %>%
+      pivot_longer(-var1, names_to = "var2", values_to = "p"),
+    by = c("var1", "var2")
+  ) %>%
+  mutate(
+    n  = total_n_undiag_stai_trait_df,
+    df = total_df_undiag_stai_trait_df
+  ) %>%
+  filter(var1 != var2) %>%
+  mutate(
+    p_fdr = p.adjust(p, method = "fdr")
+  )  # Remove self-correlations
+
+corr_tidy_undiag_stai_trait_df
+```
+
+
+### Regression analysis on this dataset
+
+```{r}
+regmodel_df_undiag_stai_trait <- lm(mwq_total_score ~ ASRS_total_score + MSSB_total + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score + STAI_trait_total, 
+                                data = df_undiag_stai_trait)
+
+summary(regmodel_df_undiag_stai_trait)
+```
+
+Estimates for the model with undiagnosed individuals and STAI trait modeled (n = 247):
+```{r}
+plot_model(regmodel_df_undiag_stai_trait, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates")
+```
+
+
+
+#### MSS-B supression effect
+
+Let's not create step-wise regression models from MSS-B as the only predictor, to adding other predictors and see which of them suppress the positive association of MSS-B with MW and change the sign to negative association. **Done on STAI trait dataset, 247 observations.**
+
+```{r}
+sw_regmodel_df_undiag_stai_trait_M1 <- lm(mwq_total_score ~ MSSB_total, 
+                                data = df_undiag_stai_trait)
+
+summary(sw_regmodel_df_undiag_stai_trait_M1)
+```
+
+Add ADHD first
+```{r}
+sw_regmodel_df_undiag_stai_trait_M2 <- lm(mwq_total_score ~ MSSB_total + ASRS_total_score, 
+                                data = df_undiag_stai_trait)
+
+summary(sw_regmodel_df_undiag_stai_trait_M2)
+```
+It seems that only if we add ASRS (ADHD) as an additional predictor, the effect of MSS-B changes the direction. From the bivariate correlation table we can see that there is a high positive correlation between MSS-B and ASRS.
+
+**SUPPRESSION EFFECT:**
+
+In our data, MSS-B, ASRS, and mind-wandering are all positively correlated with each other. But when we include both MSS-B and ASRS in the same regression model, the effect of MSS-B switches from positive to negative. This pattern is a classic example of a suppression effect.
+
+What happens is that MSSB and ASRS share a large amount of variance—they overlap strongly. That shared component is positively related to mind-wandering, and this is what we see in the simple correlation between MSS-B and mind-wandering. But when we statistically control for ASRS, we remove that shared variance from MSS-B. What is left is the unique part of MSSB that does not overlap with ASRS.
+
+Once this unique component is isolated, it shows a negative relationship with mind-wandering. In other words, MSS-B contains two opposing sources of variance: one part that overlaps with ASRS and relates positively to mind-wandering, and another unique part that relates negatively. The sign flip in the regression coefficient is exactly what we expect when suppression is operating.
+
+#### Additional testing with partial correlation
+
+**Compute the (partial) correlation between x and y, while controlling for z.**
+
+```{r}
+pcor.test(
+  df_undiag_stai_trait$mwq_total_score,
+  df_undiag_stai_trait$MSSB_total,
+  df_undiag_stai_trait$ASRS_total_score,
+  method = "spearman"
+)
+```
+Although MSS-B showed a positive zero-order correlation with mind-wandering (r = .24), the partial correlation controlling for ASRS was negative (partial r = –.11, p = .074). This indicates that the positive association was carried by variance shared with ASRS, whereas the unique MSS-B component is negatively related to mind-wandering, consistent with a suppression effect.
+
+
+### Bayesian regression
+
+
+### On STAI trait data subset
+
+Defining priors:
+```{r}
+common_priors <- c(
+  prior(normal(0, 1), class = "Intercept"),  # intercept prior (same in both)
+  prior(student_t(3, 0, 1), class = "sigma") # weakly informative prior for residual SD
+)
+
+# priors for the full model (add priors for coefficients 'b')
+full_priors <- c(
+  common_priors,
+  prior(normal(0, 1), class = "b") # prior for all regression coefficients
+)
+```
+
+
+Create null model for model comparison:
+```{r}
+null_priors <- common_priors
+
+bayes_null_model_stai_trait_df <- brm(
+  mwq_total_score ~ 1,
+  data = df_undiag_stai_trait,
+  family = gaussian(),
+  prior = null_priors,
+  chains = 4, iter = 2000,
+  save_pars = save_pars(all = TRUE)
+)
+```
+
+
+Model with all predictors:
+```{r}
+bayes_full_model_stai_trait_df <- brm( mwq_total_score ~ 
+                                         ASRS_total_score + MSSB_total + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score
+                                       + HCL32_total_score + EAT_total_score + STAI_trait_total, 
+                                       data = df_undiag_stai_trait,
+                                       family = gaussian(),
+                                       prior = full_priors,
+                                       chains = 4, iter = 20000, warmup = 10000,
+                                       save_pars = save_pars(all = TRUE)
+)
+
+summary(bayes_full_model_stai_trait_df)
+```
+
+#### Additional checks of the Bayesian model
+
+Bayesian R-squared
+
+```{r}
+bayes_R2(bayes_full_model_stai_trait_df)
+```
+
+Posterior predictive checks
+```{r}
+pp_check(bayes_full_model_stai_trait_df, ndraws = 100, type = "dens_overlay")
+```
+
+Bayes factor
+```{r}
+bayesfactor_parameters(bayes_full_model_stai_trait_df)
+```
+
+
+
+
+
+
+## Reduced dataset - no diagnosed/medicated participants
+
+We will perform Bayesian regression on the dataset without medicated/diagnosed participants. 
+
+Just to test again, fit the linear regression
+```{r}
+regmodel_df_reduced_scaled_3_no_diag <- lm(mwq_total_score ~ ASRS_total_score + MSSB_total + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score, 
+                                data = df_reduced_3_scaled)
+
+summary(regmodel_df_reduced_scaled_3_no_diag)
+```
+
+Fitting Bayesian regression on reduced dataset:
+```{r}
+bayes_model_reduced_df <- brm(
+  mwq_total_score ~ ASRS_total_score + MSSB_total + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score, 
+                                data = df_reduced_3_scaled,
+  family = gaussian(),
+                                       prior = full_priors,
+                                       chains = 4, iter = 20000, warmup = 10000,
+                                       save_pars = save_pars(all = TRUE)
+)
+
+
+summary(bayes_model_reduced_df)
+
+bayesfactor_parameters(bayes_model_reduced_df)
+```
+
+Compare estimates with regression on reduced dataset without STAI trait as a covariate
+```{r}
+regmodel_df_reduced_3_test <- lm(mwq_total_score ~ ASRS_total_score + MSSB_total + AQ_total_score + OCI_R_total_score + BDI_shorten_total_score + HCL32_total_score + EAT_total_score,
+                                data = df_reduced_3_scaled)
+
+summary(regmodel_df_reduced_3_test)
+
+
+
+```
+
+Estimates for reduced dataset without controlling for STAI trait (n = 376)
+```{r}
+plot_model(regmodel_df_reduced_3_test, 
+           type = "est", 
+           show.value = TRUE, 
+           value.offset = 0.35, 
+           digits = 3,
+           axis.labels = name_dict) +  
+  theme_minimal() + 
+  labs(title = "Mind wandering (MWQ) predictor estimates")
+```
+

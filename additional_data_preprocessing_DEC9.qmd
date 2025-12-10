@@ -1,0 +1,754 @@
+---
+title: "Final data preprocessing and EAT score re-calculation"
+author: "Miha Likar"
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    number-sections: true
+    toc-expand: true
+editor: visual
+
+---
+
+```{r}
+library(tidyverse)
+```
+
+# Prepare name vectors and dictionary
+
+Create vectors of items:
+```{r}
+mwq_items <- paste0("mwq_", c(1:5))
+mssb_items <- paste0("MSSB_", c(1:38))
+ocir_items <- paste0("OCI_R_", c(1:18))
+aq_items <- paste0("AQ_", c(1:50))
+asrs_items <- paste0("ASRS_", c(1:18))
+bdi_items <- paste0("BDI_shorten_", c(1:9))
+eat_items <- paste0("EAT_", c(1:26))
+hcl_items <- paste0("HCL32_", c(1:32))
+stai_trait_items <- paste0("STAI_trait_", c(21:40))
+```
+
+MSSB
+```{r}
+mssb_positive <- c(
+  "MSSB_2",
+  "MSSB_5",
+  "MSSB_8",
+  "MSSB_11",
+  "MSSB_14",
+  "MSSB_17",
+  "MSSB_20",
+  "MSSB_23",
+  "MSSB_26",
+  "MSSB_29",
+  "MSSB_32",
+  "MSSB_35",
+  "MSSB_38"
+)
+
+mssb_negative <- c(
+  "MSSB_1",
+  "MSSB_4",
+  "MSSB_7",
+  "MSSB_10",
+  "MSSB_13",
+  "MSSB_16",
+  "MSSB_19",
+  "MSSB_22",
+  "MSSB_25",
+  "MSSB_28",
+  "MSSB_31",
+  "MSSB_34",
+  "MSSB_37"
+)
+
+mssb_disorganised <- c(
+  "MSSB_3",
+  "MSSB_6",
+  "MSSB_9",
+  "MSSB_12",
+  "MSSB_15",
+  "MSSB_18",
+  "MSSB_21",
+  "MSSB_24",
+  "MSSB_27",
+  "MSSB_30",
+  "MSSB_33",
+  "MSSB_36"
+)
+```
+
+
+OCI-R
+```{r}
+oci_r_washing <- c(
+  "OCI_R_5",
+  "OCI_R_11",
+  "OCI_R_17"
+)
+
+oci_r_obsessing <- c(
+  "OCI_R_6",
+  "OCI_R_12",
+  "OCI_R_18"
+)
+
+oci_r_hoarding <- c(
+  "OCI_R_1",
+  "OCI_R_7",
+  "OCI_R_13"
+)
+
+oci_r_ordering <- c(
+  "OCI_R_3",
+  "OCI_R_9",
+  "OCI_R_15"
+)
+
+oci_r_checking <- c(
+  "OCI_R_2",
+  "OCI_R_8",
+  "OCI_R_14"
+)
+
+oci_r_neutralising <- c(
+  "OCI_R_4",
+  "OCI_R_10",
+  "OCI_R_16"
+)
+```
+
+
+ASRS
+
+```{r}
+asrs_hyper_impuls <- c(
+  "ASRS_5",
+  "ASRS_6",
+  "ASRS_12",
+  "ASRS_13",
+  "ASRS_14",
+  "ASRS_15",
+  "ASRS_16",
+  "ASRS_17",
+  "ASRS_18"
+)
+
+asrs_inattentive <- c(
+  "ASRS_1",
+  "ASRS_2",
+  "ASRS_3",
+  "ASRS_4",
+  "ASRS_7",
+  "ASRS_8",
+  "ASRS_9",
+  "ASRS_10",
+  "ASRS_11"
+)
+```
+
+EAT-26
+
+```{r}
+eat_dieting <- c(
+  "EAT_1",
+  "EAT_6",
+  "EAT_7",
+  "EAT_10",
+  "EAT_11",
+  "EAT_12",
+  "EAT_14",
+  "EAT_16",
+  "EAT_17",
+  "EAT_22",
+  "EAT_23",
+  "EAT_24",
+  "EAT_26"
+)
+
+eat_bul_foodpreoc <- c(
+  "EAT_3",
+  "EAT_4",
+  "EAT_9",
+  "EAT_18",
+  "EAT_21",
+  "EAT_25"
+)
+
+eat_oral_ctrl <- c(
+  "EAT_2",
+  "EAT_5",
+  "EAT_8",
+  "EAT_13",
+  "EAT_15",
+  "EAT_19",
+  "EAT_20"
+)
+
+eat_all_items <- c(
+  "EAT_2",
+  "EAT_5",
+  "EAT_8",
+  "EAT_13",
+  "EAT_15",
+  "EAT_19",
+  "EAT_20",
+  "EAT_3",
+  "EAT_4",
+  "EAT_9",
+  "EAT_18",
+  "EAT_21",
+  "EAT_25",
+  "EAT_1",
+  "EAT_6",
+  "EAT_7",
+  "EAT_10",
+  "EAT_11",
+  "EAT_12",
+  "EAT_14",
+  "EAT_16",
+  "EAT_17",
+  "EAT_22",
+  "EAT_23",
+  "EAT_24",
+  "EAT_26"
+)
+```
+
+HCL-32
+
+```{r}
+hcl_active <- c(
+  "HCL32_2",
+  "HCL32_3",
+  "HCL32_4",
+  "HCL32_5",
+  "HCL32_6",
+  "HCL32_10",
+  "HCL32_11",
+  "HCL32_12",
+  "HCL32_13",
+  "HCL32_15",
+  "HCL32_16",
+  "HCL32_19",
+  "HCL32_20",
+  "HCL32_22",
+  "HCL32_24",
+  "HCL32_28"
+)
+
+hcl_irritable <- c(
+  "HCL32_7",
+  "HCL32_8",
+  "HCL32_9",
+  "HCL32_21",
+  "HCL32_25",
+  "HCL32_26",
+  "HCL32_27",
+  "HCL32_31",
+  "HCL32_32"
+)
+```
+
+STAI
+```{r}
+STAI_state <- c(
+  "STAI_state_1",
+  "STAI_state_2",
+  "STAI_state_3",
+  "STAI_state_4",
+  "STAI_state_5",
+  "STAI_state_6",
+  "STAI_state_7",
+  "STAI_state_8",
+  "STAI_state_9",
+  "STAI_state_10",
+  "STAI_state_11",
+  "STAI_state_12.quantised",
+  "STAI_state_13.quantised",
+  "STAI_state_12",
+  "STAI_state_13",
+  "STAI_state_14",
+  "STAI_state_15",
+  "STAI_state_16",
+  "STAI_state_17",
+  "STAI_state_18",
+  "STAI_state_19",
+  "STAI_state_20")
+
+STAI_trait <- c(
+  "STAI_trait_21",
+  "STAI_trait_22",
+  "STAI_trait_23",
+  "STAI_trait_24",
+  "STAI_trait_25",
+  "STAI_trait_26",
+  "STAI_trait_27",
+  "STAI_trait_28",
+  "STAI_trait_29",
+  "STAI_trait_30",
+  "STAI_trait_31",
+  "STAI_trait_32",
+  "STAI_trait_33",
+  "STAI_trait_34",
+  "STAI_trait_35",
+  "STAI_trait_36",
+  "STAI_trait_37",
+  "STAI_trait_38",
+  "STAI_trait_39",
+  "STAI_trait_30"
+)
+```
+
+Create a name dictionary to use for clean naming in plots and tables:
+```{r}
+name_dict <- c(
+  mwq_total_score = "MWQ (mind-wandering)",
+  ASRS_total_score = "ASRS (ADHD)", 
+  MSSB_total = "MSS-B (schizotypy)",
+  AQ_total_score = "AQ (autism spectrum)",
+  OCI_R_total_score = "OCI-R (OCD)",
+  BDI_shorten_total_score = "BDI short (depression)",
+  HCL32_total_score = "HCL-32 (hypomania)",
+  EAT_total_score = "EAT (eating disorder)",
+  ASRS_hyper_impulse = "ASRS - hyperactive, impulsive",
+  ASRS_inattentive = "ASRS - inattentive",
+  MSSB_positive = "MSS-B - positive",
+  MSSB_negative = "MSS-B - negative",
+  MSSB_disorganised = "MSS-B - disorganised",
+  OCI_R_hoard = "OCI-R - hoarding",
+  OCI_R_wash = "OCI-R - washing",
+  OCI_R_obsess = "OCI-R - obsessing",
+  OCI_R_order = "OCI-R - ordering",
+  OCI_R_check = "OCI-R - checking", 
+  OCI_R_neutral = "OCI-R - neutralizing",
+  HCL32_act = "HCL-32 - active/elated",
+  HCL32_irrit = "HCL-32 - risk-taking/irritable",
+  EAT_diet = "EAT - dieting",
+  EAT_bul_foodpreoc = "EAT - bulimia, food preoc.",
+  EAT_oral_ctrl = "EAT - oral control",
+  STAI_trait_total = "STAI - Trait (anxiety)"
+)
+```
+
+
+# Overview
+
+For the final data pre-processing, the following steps are executed:
+
+- Import raw merged dataframe received from Bianka
+- Filter out observations (no MWQ, missing majority questionnaires, missing BDI, duplicated observations per participant)
+- Determine data collection round and medicated/diagnosed participants
+- Rename original/Bianka's total scores; create Miha's total scores and compare
+- Import EAT raw scores and calculate total scores
+- Compare individual item scores in original merged dataframe and EAT scores only dataframe
+
+
+# Preprocessing
+
+Import raw merged dataset
+
+```{r}
+df_merged_raw_dec9 <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/MW_spectrum_data/Merged_dataset/all_spectrum_dataset.csv")
+```
+
+Create a duplicate for cleaning
+```{r}
+df_merged_clean_dec9 <- df_merged_raw_dec9
+```
+
+**Total number of entries in the complete merged dataset is: 709**
+
+Filter out rows where MWQ has no entries.
+
+```{r}
+df_merged_clean_dec9 <- df_merged_clean_dec9 %>%
+  filter(!is.na(mwq_1))
+
+nrow(df_merged_clean_dec9)
+```
+
+237 participants/rows/obervations were deleted as they lack MWQ responses.
+
+**Remaining after this step: 472**
+
+There seem to be quite a few observations/participants, where majority of questionnaires were not answered. Since this would be impossible to impute, I suggest this rows/observations are deleted from the dataset.
+
+```{r}
+df_merged_clean_dec9 <- df_merged_clean_dec9 %>%
+  filter(!is.na(MSSB_1) & !is.na(OCI_R_1) & !is.na(AQ_1) & !is.na(EAT_1) & !is.na(HCL32_1))
+
+df_merged_clean
+```
+
+**After filtering observations where majority of questionnaires were NA:** - **451 remain** - **21 observations were deleted**
+
+Clean/remove redundant columns:
+
+```{r}
+df_merged_clean_dec9 <- df_merged_clean_dec9 %>%  
+  dplyr::select(-(c("...1", "X.1", "X.x", "X.y")))
+```
+
+```{r}
+colnames(df_merged_clean_dec9)
+```
+
+
+Rename all of Bianka's columns to _bianka, so I will be able to precisely compare the scores.
+```{r}
+df_merged_clean_dec9 <- df_merged_clean_dec9 %>%
+  rename(MSSB_total_score_bianka = MSSB_total_score,
+         MSSB_pos_bianka = MSSB_pos,
+         MSSB_neg_bianka = MSSB_neg,
+         MSSB_dis_bianka = MSSB_dis,
+         
+         OCI_R_total_score_bianka = OCI_R_total_score,
+         OCI_R_hoarding_bianka = OCI_R_hoarding,
+         OCI_R_washing_bianka = OCI_R_washing,
+         OCI_R_obsessing_bianka = OCI_R_obsessing,
+         OCI_R_ordering_bianka = OCI_R_ordering,
+         OCI_R_neutralizing_bianka = OCI_R_neutralizing,
+         OCI_R_checking_bianka = OCI_R_checking,
+         
+         AQ_total_score_bianka = AQ_total_score,
+         
+         ASRS_total_score_bianka = ASRS_total_score,
+         ASRS_hyperactivity_bianka = ASRS_hyperactivity,
+         ASRS_attention_bianka = ASRS_attention,
+         
+         BDI_shorten_total_score_bianka = BDI_shorten_total_score,
+         
+         EAT_total_score_bianka = EAT_total_score,
+         EAT_dieting_bianka = EAT_dieting,
+         EAT_bulimia_bianka = EAT_bulimia,
+         EAT_oral_control_bianka = EAT_oral_control,
+         
+         HCL32_total_score_bianka = HCL32_total_score,
+         HCL32_active_bianka = HCL32_active,
+         HCL32_irritable_bianka = HCL32_irritable,
+         
+         mwq_total_score_bianka = mwq_total_score,
+         
+         RRS_total_score_bianka = RRS_total_score,
+         
+         CAMSR_total_score_bianka = CAMSR_total_score,
+         
+         STAI_state_sum_bianka = STAI_state_sum,
+         STAI_trait_sum_bianka = STAI_trait_sum
+         )
+```
+
+
+I noticed that for many participants `MSSB_total_score` is missing, but they have raw values. Maybe one calculation did not happen. Let's re-calculate total MSSB scores.
+
+```{r}
+df_merged_clean_dec9 <- df_merged_clean_dec9 %>%
+  mutate(MSSB_total_score_miha = rowSums(across(all_of(mssb_items)), na.rm = TRUE))
+```
+
+
+
+Perform my scale and subscale calculations for score comparison
+```{r}
+df_merged_clean_dec9_both_calc <- df_merged_clean_dec9 %>%
+  mutate(mwq_total_score_miha          = rowSums(across(all_of(mwq_items))),
+            
+         MSSB_total_score_miha         = rowSums(across(all_of(mssb_items))),
+         MSSB_pos_miha                 = rowSums(across(all_of(mssb_positive))),
+         MSSB_neg_miha                 = rowSums(across(all_of(mssb_negative))),
+         MSSB_dis_miha                 = rowSums(across(all_of(mssb_disorganised))),
+            
+         OCI_R_total_score_miha        = rowSums(across(all_of(ocir_items))),
+         OCI_R_hoarding_miha           = rowSums(across(all_of(oci_r_hoarding))),
+         OCI_R_washing_miha            = rowSums(across(all_of(oci_r_washing))),
+         OCI_R_obsessing_miha          = rowSums(across(all_of(oci_r_obsessing))),
+         OCI_R_ordering_miha           = rowSums(across(all_of(oci_r_ordering))),
+         OCI_R_neutralizing_miha       = rowSums(across(all_of(oci_r_neutralising))),
+         OCI_R_checking_miha           = rowSums(across(all_of(oci_r_checking))),
+            
+         AQ_total_score_miha          = rowSums(across(all_of(aq_items))),
+            
+         ASRS_total_score_miha         = rowSums(across(all_of(asrs_items))),
+         ASRS_hyperactivity_miha       = rowSums(across(all_of(asrs_hyper_impuls))),
+         ASRS_attention_miha           = rowSums(across(all_of(asrs_inattentive))),
+         
+         BDI_shorten_total_score_miha  = rowSums(across(all_of(bdi_items))),
+       
+         EAT_total_score_miha          = rowSums(across(all_of(eat_items))),
+         EAT_dieting_miha              = rowSums(across(all_of(eat_dieting))),
+         EAT_bulimia_miha              = rowSums(across(all_of(eat_bul_foodpreoc))),
+         EAT_oral_control_miha         = rowSums(across(all_of(eat_oral_ctrl))),
+       
+         HCL32_total_score_miha        = rowSums(across(all_of(hcl_items))),
+         HCL32_active_miha             = rowSums(across(all_of(hcl_active))),
+         HCL32_irritable_miha          = rowSums(across(all_of(hcl_irritable))),
+       
+         STAI_state_sum_miha           = rowSums(across(all_of(STAI_state)), na.rm = TRUE),
+         STAI_trait_sum_miha           = rowSums(across(all_of(STAI_trait))))
+```
+
+Check is NAs in Bianka's and my calculations match:
+```{r}
+df_merged_clean_dec9_both_calc %>%
+  summarise(across(contains("total_score"), ~ sum(!is.na(.x)))) %>%
+  t()
+
+df_merged_clean_dec9_both_calc %>%
+  summarise(across(contains("_sum_"), ~ sum(!is.na(.x)))) %>%
+  t()
+```
+
+Check if scores match
+```{r}
+df_merged_clean_dec9_both_calc %>%
+  summarise(total_cases = n(),
+            mwq_match              = sum(mwq_total_score_bianka == mwq_total_score_miha, na.rm = TRUE),
+            
+            aq_match               = sum(AQ_total_score_bianka == AQ_total_score_miha, na.rm = TRUE),
+            
+            asrs_match             = sum(ASRS_total_score_bianka == ASRS_total_score_miha, na.rm = TRUE),
+            asrs_hyperactive_match = sum(ASRS_hyperactivity_bianka == ASRS_hyperactivity_miha, na.rm = TRUE),
+            asrs_inattentive_match = sum(ASRS_attention_bianka == ASRS_attention_miha, na.rm = TRUE),
+            
+            bdi_match              = sum(BDI_shorten_total_score_bianka == BDI_shorten_total_score_miha, na.rm = TRUE),
+            
+            mssb_match             = sum(MSSB_total_score_bianka == MSSB_total_score_miha, na.rm = TRUE),
+            mssb_pos_match         = sum(MSSB_pos_bianka == MSSB_pos_miha, na.rm = TRUE),
+            mssb_neg_match         = sum(MSSB_neg_bianka == MSSB_neg_miha, na.rm = TRUE),
+            mssb_dis_match         = sum(MSSB_dis_bianka == MSSB_dis_miha, na.rm = TRUE),
+            
+            hcl_match              = sum(HCL32_total_score_bianka == HCL32_total_score_miha, na.rm = TRUE),
+            hcl_act_match          = sum(HCL32_active_bianka == HCL32_active_miha, na.rm = TRUE),
+            hcl_irr_match          = sum(HCL32_irritable_bianka == HCL32_irritable_miha, na.rm = TRUE),
+            
+            oci_match              = sum(OCI_R_total_score_bianka == OCI_R_total_score_miha, na.rm = TRUE),
+            oci_hoard_match        = sum(OCI_R_hoarding_bianka == OCI_R_hoarding_miha, na.rm = TRUE),
+            oci_wash_match         = sum(OCI_R_washing_bianka == OCI_R_washing_miha, na.rm = TRUE),
+            oci_obsess_match       = sum(OCI_R_obsessing_bianka == OCI_R_obsessing_miha, na.rm = TRUE),
+            oci_order_match        = sum(OCI_R_ordering_bianka == OCI_R_ordering_miha, na.rm = TRUE),
+            oci_neutral_match      = sum(OCI_R_neutralizing_bianka == OCI_R_neutralizing_miha, na.rm = TRUE),
+            oci_check_match        = sum(OCI_R_checking_bianka == OCI_R_checking_miha, na.rm = TRUE),
+            
+            eat_diet_match         = sum(EAT_dieting_bianka == EAT_dieting_miha, na.rm = TRUE),
+            eat_bulimia_match      = sum(EAT_bulimia_bianka == EAT_bulimia_miha, na.rm = TRUE),
+            eat_oral_ctrl_match    = sum(EAT_oral_control_bianka == EAT_oral_control_miha, na.rm = TRUE),
+            
+            STAI_state_match       = sum(STAI_state_sum_bianka == STAI_state_sum_miha, na.rm = TRUE),
+            STAI_trait_match       = sum(STAI_trait_sum_bianka == STAI_trait_sum_miha, na.rm = TRUE)) %>%
+  t()
+```
+
+I also ask uncle ChatGPT how to make code cleaner
+```{r}
+df_merged_clean_dec9_both_calc %>%
+  summarise(
+    total_cases = n(),
+    across(
+      ends_with("_bianka"),
+      ~ {
+        miha_col <- str_replace(cur_column(), "_bianka$", "_miha")
+        
+        if (miha_col %in% names(df_merged_clean_dec9_both_calc)) {
+          sum(.x == df_merged_clean_dec9_both_calc[[miha_col]], na.rm = TRUE)
+        } else {
+          NA_integer_  # or 0 if you prefer
+        }
+      },
+      .names = "{str_replace(.col, '_bianka$', '')}_match"
+    )
+  ) %>%
+  t()
+```
+
+
+Good, in all cases where Bianka has all calculations and I have all calculations we match, expect for EAT scores, evidently. So let's calculate those again. 
+
+
+# Re-calculate EAT scores and compare to previous calculations
+
+## Raw data calculation
+
+Import data
+```{r}
+eat_scores_raw <- read_csv("/Users/Intragalactic/Documents/PhD ELTE/Year 2/Lab/MW spectrum study/MW_spectrum_data/eat2.csv")
+```
+
+Recoding the items
+```{r}
+recode_eat1 <- paste0("EAT_", c(1:25))
+recode_eat2 <- paste0("EAT_", 26)
+
+# 1–25.items
+eat_scores_raw_recoded <- eat_scores_raw %>%
+  mutate(across(all_of(recode_eat1), ~ case_when(
+    . == 1 ~ 3,
+    . == 2 ~ 2,
+    . == 3 ~ 1,
+    . %in% c(4, 5, 6) ~ 0,
+    TRUE ~ NA_real_
+  )))
+
+eat_scores_raw_recoded <- eat_scores_raw_recoded %>%
+  # 26. item
+  mutate(across(all_of(recode_eat2), ~ case_when(
+    . %in% c(1, 2, 3) ~ 0,
+    . == 4 ~ 1,
+    . == 5 ~ 2,
+    . == 6 ~ 3,
+    TRUE ~ NA_real_
+  )))
+
+```
+
+Match IDs in both datasets
+```{r}
+ids_in_both_datasets <- intersect(eat_scores_raw_recoded$Participant.Public.ID, df_merged_clean_dec9_both_calc$Participant.Public.ID)
+```
+
+
+```{r}
+eat_scores_raw_recoded <- eat_scores_raw_recoded  %>%
+  mutate(EAT_total_recalc = rowSums(across(all_of(eat_all_items)))) %>%
+  mutate(EAT_diet_recalc = rowSums(across(all_of(eat_dieting)))) %>%
+  mutate(EAT_bul_foodpreoc_recalc = rowSums(across(all_of(eat_bul_foodpreoc)))) %>%
+  mutate(EAT_oral_ctrl_recalc = rowSums(across(all_of(eat_oral_ctrl))))
+```
+
+Filter those participants who are in both datasets:
+
+```{r}
+eat_scores_raw_recoded_filtered <- eat_scores_raw_recoded %>%
+  filter(Participant.Public.ID %in%ids_in_both_datasets) %>%
+  arrange(Participant.Public.ID) %>%
+  filter(!is.na(EAT_25))
+```
+
+
+Extract data from "my" organised dataset
+```{r}
+df_merged_clean_dec9_both_calc_filtered <- df_merged_clean_dec9_both_calc %>%
+  filter(Participant.Public.ID %in% ids_in_both_datasets) %>%
+  dplyr::select(c("Participant.Public.ID", starts_with("EAT_"))) %>%
+  arrange(Participant.Public.ID)
+```
+
+
+Check if raw items match:
+```{r}
+df_merged_clean_dec9_both_calc_filtered %>%
+  summarise(
+    across(
+      all_of(eat_items),
+      ~ sum(.x == eat_scores_raw_recoded_filtered[[cur_column()]], na.rm = TRUE),
+      .names = "{.col}_match"
+    )
+  ) %>%
+  t()
+```
+
+Ok, it appears that values of each EAT item match, probably something went wrong in the total score calculation. 
+
+```{r}
+sum(df_merged_clean_dec9_both_calc_filtered$EAT_total_score_bianka == eat_scores_raw_recoded_filtered$EAT_total_recalc)
+```
+
+```{r}
+sum(df_merged_clean_dec9_both_calc_filtered$EAT_total_score_miha == eat_scores_raw_recoded_filtered$EAT_total_recalc)
+```
+
+It seems that if we consider new total score calculation in EAT raw data questionnaire, they amtch my calculations in total dataframe. Let's check for individual subscales:
+```{r}
+sum(df_merged_clean_dec9_both_calc_filtered$EAT_dieting_miha == eat_scores_raw_recoded_filtered$EAT_diet_recalc)
+sum(df_merged_clean_dec9_both_calc_filtered$EAT_bulimia_miha == eat_scores_raw_recoded_filtered$EAT_bul_foodpreoc_recalc)
+sum(df_merged_clean_dec9_both_calc_filtered$EAT_oral_control_miha == eat_scores_raw_recoded_filtered$EAT_oral_ctrl_recalc)
+```
+My calculations in original dataframe match re-calculations in the EAT raw dataframe. So, I don't even have to merge the data, because it appears that I can just keep the scores that I calculated. 
+
+
+# Finalising the dataset
+
+Ok, so it appears that my EAT calculations were OK, and we can work with them in the analysis. Now let's finalise pre-processing of the dataset:
+
+- remove 1 duplicated individual observations
+- remove 1 observation with BDI = NA
+- change column names
+- save relevant column names
+
+So total preprocessing data deletion:
+
+- 237 participants/rows/obervations were deleted as they lack MWQ responses
+- 21 observations were deleted due to majority of questionnaires missing 
+- 1 observation deleted due to missing BDI 
+- 1 observation deleted due to duplicated value for participant 49oe8na4
+
+```{r}
+cols_to_keep <- c(
+"Participant.Public.ID",
+"gender.quantised",
+"age.year",
+
+"mwq_total_score_miha",
+
+"AQ_total_score_miha",
+"AQ_group",
+
+"ASRS_total_score_miha",
+"ASRS_hyperactivity_miha",
+"ASRS_attention_miha",
+
+"BDI_shorten_total_score_miha",
+
+"EAT_total_score_miha",
+"EAT_dieting_miha",
+"EAT_bulimia_miha",
+"EAT_oral_control_miha",
+
+"HCL32_total_score_miha",
+"HCL32_active_miha",
+"HCL32_irritable_miha",
+"HCL32_group",
+
+"MSSB_total_score_miha",
+"MSSB_pos_miha",
+"MSSB_neg_miha",
+"MSSB_dis_miha",
+
+"OCI_R_total_score_miha",
+"OCI_R_hoarding_miha",
+"OCI_R_washing_miha",
+"OCI_R_obsessing_miha",
+"OCI_R_ordering_miha",
+"OCI_R_neutralizing_miha",
+"OCI_R_checking_miha",
+"OCI_R_group",
+
+"STAI_state_sum_miha",
+"STAI_trait_sum_miha"
+)
+```
+
+Final cleaning
+```{r}
+df_dec9_final_clean <- df_merged_clean_dec9_both_calc %>%
+  filter(!is.na(BDI_shorten_total_score_miha)) %>%
+  group_by(Participant.Public.ID) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(all_of(cols_to_keep)) %>%
+  rename_with(~ str_replace(.x, "_miha$", "")) %>%
+  rename(gender = gender.quantised,
+         age = age.year,
+         MWQ_total_score = mwq_total_score,
+         STAI_state_total_score = STAI_state_sum,
+         STAI_trait_total_score = STAI_trait_sum)
+```
+
+
+Export data:
+```{r}
+write_csv(df_dec9_final_clean, "df_dec9_final_clean.csv")
+```
+
